@@ -1,0 +1,32 @@
+{
+    "ark": {
+        "cookie_说明": [
+            "1. 浏览器登录火山引擎控制台，打开 Coding Plan 用量页：",
+            "   https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan",
+            "   能看到「当前会话 / 近1周 / 近1月」三个百分比即说明已登录",
+            "",
+            "2. F12 打开开发者工具 → Network (网络) → 筛选框输入 GetCodingPlanUsage",
+            "   按 F5 刷新页面 → 在列表里找 Name 为 GetCodingPlanUsage、Type 为 xhr 的请求",
+            "",
+            "3. 点开该请求 → Headers → Request Headers 里的 Cookie 整段复制填到下方",
+            "   类似于 __spti=..."
+        ],
+        "cookie": "__spti=..."
+    },
+    "opencode": {
+        "authCookie_说明": [
+            "1. 登录 https://opencode.ai/auth",
+            "",
+            "2. F12 打开开发者工具 → Application(应用) → Cookies → 展开选 opencode.ai",
+            "",
+            "3. 找到 Name 为 auth 的条目，复制",
+            "   类似于 Fe26.2**..."
+        ],
+        "authCookie": "Fe26.2**...",
+        "workspaceID_说明": [
+            "登录后地址栏类似于： https://opencode.ai/workspace/<id>/go",
+            "将 <id> 部分替换为实际 workspaceID ，类似于 wrk_..."
+        ],
+        "workspaceID": "wrk_..."
+    }
+}
