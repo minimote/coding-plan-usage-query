@@ -1,17 +1,15 @@
 {
     "ark": {
-        "cookie_说明": [
-            "1. 浏览器登录火山引擎控制台，打开 Coding Plan 用量页：",
-            "   https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan",
-            "   能看到「当前会话 / 近1周 / 近1月」三个百分比即说明已登录",
+        "ark_说明": [
+            "AK/SK 获取方式：",
+            "1. 登录火山引擎控制台 API 访问密钥： https://console.volcengine.com/iam/keymanage",
             "",
-            "2. F12 打开开发者工具 → Network (网络) → 筛选框输入 GetCodingPlanUsage",
-            "   按 F5 刷新页面 → 在列表里找 Name 为 GetCodingPlanUsage、Type 为 xhr 的请求",
-            "",
-            "3. 点开该请求 → Headers → Request Headers 里的 Cookie 整段复制填到下方",
-            "   类似于 __spti=..."
+            "2. 创建一个 AccessKey ，复制 AccessKey ID 和 SecretAccess Key",
+            "   如果使用子账户，需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
+            "   将 accessKeyId 和 secretAccessKey 填到下方"
         ],
-        "cookie": "__spti=..."
+        "accessKeyId": "xxxx",
+        "secretAccessKey": "xxxx"
     },
     "opencode": {
         "authCookie_说明": [
