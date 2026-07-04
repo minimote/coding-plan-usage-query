@@ -7,13 +7,17 @@
 
 </div>
 
+<p>
+
 <div align="center">
     <a href="README.md">中文</a> | English
     &emsp;——&emsp;
     <a href="https://gitee.com/minimote/coding-plan-usage-query">Gitee</a> | <a href="https://github.com/minimote/coding-plan-usage-query">GitHub</a>
 </div>
 
-> Query AI Coding Plan usage and reset countdown across platforms. Outputs percentage, progress bar, and remaining time in a single line — perfect for the Claude Code status bar. Recommended for use with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh).
+<p>
+
+> Query Coding Plan usage and reset countdown across platforms. Outputs percentage, progress bar, and remaining time in a single line — perfect for the Claude Code status bar. Recommended for use with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh).
 
 **Currently supported:**
 
@@ -80,6 +84,10 @@ node query-usage-opencode-go.mjs
 ```
 
 ## Changelog
+
+### v1.1.1-2026.07.04
+
+- Polish README descriptions and layout
 
 ### v1.1.0-2026.07.04
 
