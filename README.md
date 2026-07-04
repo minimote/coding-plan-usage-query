@@ -7,13 +7,17 @@
 
 </div>
 
+<p>
+
 <div align="center">
     中文 | <a href="README_EN.md">English</a>
     &emsp;——&emsp;
     <a href="https://gitee.com/minimote/coding-plan-usage-query">Gitee</a> | <a href="https://github.com/minimote/coding-plan-usage-query">GitHub</a>
 </div>
 
-> 查询各平台 AI Coding Plan 的套餐用量和重置倒计时。输出百分比、进度条和剩余时间，推荐搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 自定义命令，放在 Claude Code 状态栏查看。
+<p>
+
+> 查询各平台 Coding Plan 的套餐用量和重置倒计时，输出百分比、进度条和剩余时间，推荐搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 的自定义命令，放在 Claude Code 状态栏查看。
 
 目前支持：
 
@@ -80,6 +84,10 @@ node query-usage-opencode-go.mjs
 ```
 
 ## 更新日志
+
+### v1.1.1-2026.07.04
+
+- 优化 README 的描述与排版
 
 ### v1.1.0-2026.07.04
 
