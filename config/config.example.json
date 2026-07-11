@@ -1,0 +1,28 @@
+{
+    "$schema": "./config.schema.json",
+    "ark": [
+        {
+            "apiKey": "xxx",
+            "type": "coding",
+            "longLabel": "火山CodingPlan",
+            "shortLabel": "Coding",
+            "accessKeyId": "xxx",
+            "secretAccessKey": "xxx"
+        },
+        {
+            "apiKey": "xxx",
+            "type": "agent",
+            "longLabel": "火山AgentPlan",
+            "shortLabel": "Agent",
+            "accessKeyId": "xxx",
+            "secretAccessKey": "xxx"
+        }
+    ],
+    "opencode": [
+        {
+            "authCookie": "xxx",
+            "workspaceID": "wrk_xxx",
+            "apiKey": "xxx"
+        }
+    ]
+}

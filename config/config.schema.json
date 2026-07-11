@@ -1,0 +1,100 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "title": "CodingPlan Usage Query Config",
+    "description": "配置文件，包含火山方舟和 OpenCodeGo 的账号凭据",
+    "type": "object",
+    "properties": {
+        "$schema": {
+            "title": "JSON Schema 配置校验文件"
+        },
+        "ark": {
+            "title": "火山方舟 Coding Plan / Agent Plan 账号列表",
+            "description": "",
+            "type": "array",
+            "items": {
+                "title": "火山方舟账号",
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "title": "套餐类型: coding | agent",
+                        "description": "对应 CodingPlan 和 Agent Plan",
+                        "type": "string",
+                        "enum": [
+                            "coding",
+                            "agent"
+                        ]
+                    },
+                    "longLabel": {
+                        "title": "长版显示标签",
+                        "description": "不填则使用默认标签 (火山CodingPlan / 火山AgentPlan)",
+                        "type": "string"
+                    },
+                    "shortLabel": {
+                        "title": "短版显示标签",
+                        "description": "不填则使用默认标签 (Coding / Agent)",
+                        "type": "string"
+                    },
+                    "accessKeyId": {
+                        "title": "火山引擎 AccessKey ID",
+                        "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
+                        "type": "string"
+                    },
+                    "secretAccessKey": {
+                        "title": "火山引擎 SecretAccessKey",
+                        "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
+                        "type": "string"
+                    },
+                    "apiKey": {
+                        "title": "API Key",
+                        "description": "CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "accessKeyId",
+                    "secretAccessKey"
+                ]
+            }
+        },
+        "opencode": {
+            "title": "OpenCodeGo 账号列表",
+            "description": "",
+            "type": "array",
+            "items": {
+                "title": "OpenCode 账号",
+                "type": "object",
+                "properties": {
+                    "longLabel": {
+                        "title": "长版显示标签",
+                        "description": "不填则使用默认标签 (OpenCodeGo)",
+                        "type": "string"
+                    },
+                    "shortLabel": {
+                        "title": "短版显示标签",
+                        "description": "不填则使用默认标签 (Go)",
+                        "type": "string"
+                    },
+                    "authCookie": {
+                        "title": "Auth Cookie",
+                        "description": "- 登录 https://opencode.ai/auth 后从浏览器 Cookie 复制 auth 的值\n- F12 → 应用程序(Application) → Cookies → opencode.ai → auth",
+                        "type": "string"
+                    },
+                    "workspaceID": {
+                        "title": "Workspace ID",
+                        "description": "工作区 ID ，登录 https://opencode.ai/auth 后在网址栏获取，类似 wrk_...",
+                        "type": "string"
+                    },
+                    "apiKey": {
+                        "title": "API Key",
+                        "description": "CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "authCookie",
+                    "workspaceID"
+                ]
+            }
+        }
+    }
+}
