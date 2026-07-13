@@ -1,5 +1,16 @@
 # 更新日志
 
+## v2.0.1-2026.07.13
+
+### 修复
+
+- 修复通过 CC Launcher / `claude --settings` 启动 Claude Code 时 `getAPIKey` 读取的是 CC-Switch 全局当前供应商、而非实际注入供应商的 API Key 的问题：改为优先从环境变量 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` 读取，遇到 `PROXY_MANAGED` 占位符则回退到数据库查询
+
+### 变更
+
+- README 项目结构展示从表格改为树形代码块，新增"相关项目"章节介绍 CC Launcher
+- `.gitignore` 新增忽略 `.claude/` 目录
+
 ## v2.0.0-2026.07.11
 
 ### 新增
