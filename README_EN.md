@@ -17,7 +17,7 @@
 
 <p>
 
-> Query Coding Plan usage and reset countdown across platforms. Outputs percentage, progress bar, and reset countdown in a single line — perfect for the Claude Code status bar. Recommended for use with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh).
+> Query Coding Plan usage and reset countdown across platforms. Recommended for use with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) custom commands, displayed in the Claude Code status bar.
 
 ## Supported Plans
 
@@ -32,18 +32,24 @@
 
 ## Project Structure
 
-|  Directory   | File                          | Description                                                                               |
-| :----------: | :---------------------------- | :---------------------------------------------------------------------------------------- |
-|  `config/`   | `config.example.json`         | Configuration template — copy to `config.json` and fill in                                |
-|              | `config.schema.json`          | JSON Schema for editor field hints                                                        |
-| `src/query/` | `query-usage-all.bat`         | Double-click to run on Windows, quickly view all platforms                                |
-|              | `query-usage-all.mjs`         | Query all plans in parallel, suitable for multi-platform usage                            |
-|              | `query-usage-ark.mjs`         | Volcengine Ark Coding Plan / Agent Plan query, can be used standalone                     |
-|              | `query-usage-opencode-go.mjs` | OpenCodeGo usage query, can be used standalone                                            |
-|              | `query-usage-smart.mjs`       | Auto-match account based on CC-Switch current provider                                    |
-| `src/tools/` | `get-actual-model.mjs`        | Resolve the actual model name from Claude config, requires ccstatusline / ccstatusline-zh |
-| `src/utils/` | `utils-query-usage.mjs`       | Shared utilities (arg parsing, subprocess, progress bar, countdown, colors)               |
-|              | `utils-cc-switch.mjs`         | CC-Switch utilities (current provider detection and API Key reading)                      |
+```text
+coding-plan-usage-query/
+├── config/
+│   ├── config.example.json                # Config template
+│   └── config.schema.json                 # JSON Schema validation
+└── src/
+    ├── query/
+    │   ├── query-usage-all.bat            # Double-click to run (Windows)
+    │   ├── query-usage-all.mjs            # Query all plans in parallel
+    │   ├── query-usage-ark.mjs            # Volcengine Ark query
+    │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
+    │   └── query-usage-smart.mjs          # Auto-match via CC-Switch
+    ├── tools/
+    │   └── get-actual-model.mjs           # Resolve actual model name
+    └── utils/
+        ├── utils-query-usage.mjs           # Shared utilities
+        └── utils-cc-switch.mjs             # CC-Switch utilities
+```
 
 ## Prerequisites
 
@@ -183,6 +189,10 @@ node F:/xxx/query-usage-smart.mjs
 ## Changelog
 
 [CHANGELOG](CHANGELOG.md)
+
+## Related Projects
+
+- **CC Launcher** ([Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)): Launch Claude Code with a specified CC-Switch provider; multiple instances using different providers can run simultaneously without affecting the global active state.
 
 ## License
 

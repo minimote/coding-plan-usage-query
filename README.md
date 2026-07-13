@@ -17,7 +17,7 @@
 
 <p>
 
-> 查询各平台 Coding Plan 的套餐用量和重置倒计时，输出百分比、进度条和重置倒计时，推荐搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 的自定义命令，放在 Claude Code 状态栏查看。
+> 查询各平台 Coding Plan 的套餐用量和重置倒计时，推荐搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 的自定义命令放在 Claude Code 状态栏查看。
 
 ## 支持的套餐
 
@@ -32,18 +32,24 @@
 
 ## 项目结构
 
-| 目录         | 文件                          | 说明                                                                         |
-| :----------- | :---------------------------- | :--------------------------------------------------------------------------- |
-| `config/`    | `config.example.json`         | 配置文件模板，复制为 `config.json` 后填写                                    |
-|              | `config.schema.json`          | JSON Schema 校验文件，编辑器据此提供字段提示                                 |
-| `src/query/` | `query-usage-all.bat`         | Windows 下可双击运行，快速查看全部平台用量                                   |
-|              | `query-usage-all.mjs`         | 查询所有套餐用量（并行），适合同时使用多个平台时                             |
-|              | `query-usage-ark.mjs`         | 火山方舟 Coding Plan / Agent Plan 用量查询，可单独使用                       |
-|              | `query-usage-opencode-go.mjs` | OpenCodeGo 用量查询，可单独使用                                              |
-|              | `query-usage-smart.mjs`       | 根据 CC-Switch 当前供应商自动匹配并运行对应查询脚本                          |
-| `src/tools/` | `get-actual-model.mjs`        | 通过 Claude 配置反推真实模型名称，需搭配 ccstatusline / ccstatusline-zh 使用 |
-| `src/utils/` | `utils-query-usage.mjs`       | 共享工具函数（参数解析、子进程执行、进度条、倒计时、着色）                   |
-|              | `utils-cc-switch.mjs`         | CC-Switch 相关工具（当前供应商识别与 API Key 读取）                          |
+```text
+coding-plan-usage-query/
+├── config/
+│   ├── config.example.json                # 配置模板
+│   └── config.schema.json                 # JSON Schema 校验
+└── src/
+    ├── query/
+    │   ├── query-usage-all.bat            # Windows 双击运行
+    │   ├── query-usage-all.mjs            # 并行查询全部套餐
+    │   ├── query-usage-ark.mjs            # 火山方舟用量查询
+    │   ├── query-usage-opencode-go.mjs    # OpenCodeGo 用量查询
+    │   └── query-usage-smart.mjs          # 按 CC-Switch 自动匹配
+    ├── tools/
+    │   └── get-actual-model.mjs           # 反推真实模型名称
+    └── utils/
+        ├── utils-query-usage.mjs           # 共享工具函数
+        └── utils-cc-switch.mjs             # CC-Switch 工具
+```
 
 ## 前置要求
 
@@ -183,6 +189,10 @@ node F:/xxx/query-usage-smart.mjs
 ## 更新日志
 
 [CHANGELOG](CHANGELOG.md)
+
+## 相关项目
+
+- **CC Launcher**（[Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)）：使用指定的 CC-Switch 供应商启动 Claude Code，可同时运行多个不同供应商的 Claude Code 实例，不影响 CC-Switch 的全局激活状态。
 
 ## License
 

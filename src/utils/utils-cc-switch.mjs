@@ -108,13 +108,24 @@ export async function lookupProviderInDb(id) {
  * @returns {Promise<string>} token；获取失败时抛出 Error
  */
 export async function getAPIKey(id = getCurrentProviderId()) {
+    // 优先从环境变量读取
+    const env = process.env;
+    const envKey = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY;
+    // PROXY_MANAGED 是 CC-Switch 代理模式占位符，环境变量无真实 key，回退到数据库
+    if (envKey && envKey !== "PROXY_MANAGED") {
+        return envKey;
+    }
+
+    // 回退到 CC-Switch 数据库
     const row = await lookupProviderInDb(id);
     if (!row) {
         throw new Error(`供应商 "${id}" 未在 CC-Switch 数据库中找到`);
     }
     try {
-        const env = JSON.parse(row.settings_config).env || {};
-        return env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY;
+        const providerEnv = JSON.parse(row.settings_config).env || {};
+        return (
+            providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY
+        );
     } catch (error) {
         throw new Error(`无法获取 API Key: ${error.message}`);
     }
