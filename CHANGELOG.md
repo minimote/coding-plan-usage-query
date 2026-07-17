@@ -1,5 +1,20 @@
 # 更新日志
 
+## v2.1.0-2026.07.18
+
+### 新增
+
+- `--hide-on-monthly-exhausted` 参数：月度额度耗尽时隐藏该行输出（`true`/`false`，默认 `false`）；smart 脚本使用免费模型查询全部账号时自动启用，过滤已耗尽的账号
+- 用量行前缀着色（薰衣草蓝），错误提示前缀同步着色
+
+### 变更
+
+- `query-usage-all.bat` 变更为 `query-usage-all.cmd`
+- `query-usage-all.mjs` 过滤子脚本的空输出，避免隐藏行留下空行
+- `query-usage-ark.mjs` 拆分 `fetchUsage` 与 `renderWindows`，隐藏逻辑统一收敛到 `renderWindows`
+- `query-usage-smart.mjs` 重构参数透传：非免费模型分支只传必要参数（position/display/type），不再透传用户传入的 `--type` 等参数
+- `get-actual-model.mjs` 判断路由模式时 `ANTHROPIC_BASE_URL` 优先取环境变量，再回退 `settings.json`
+
 ## v2.0.1-2026.07.13
 
 ### 修复

@@ -13,12 +13,13 @@
 
 import { readFileSync } from "fs";
 import {
+    ARGS,
     SCRIPTS,
     HELPER,
-    TYPE,
     TOOLS_DIR,
     loadConfig,
     safeExec,
+    parseArgs,
 } from "../utils/utils-query-usage.mjs";
 import { getAPIKey } from "../utils/utils-cc-switch.mjs";
 
@@ -53,10 +54,16 @@ function isFreeModel() {
 // #region 脚本入口 ----------------
 
 async function main() {
-    const args = process.argv.slice(2);
+    const { display } = parseArgs(process.argv);
 
-    // 使用免费模型时查询全部账号
+    // 使用免费模型时查询全部账号，强制隐藏月度用完的账号
     if (isFreeModel()) {
+        const args = [
+            ARGS.DISPLAY,
+            display,
+            ARGS.HIDE_ON_MONTHLY_EXHAUSTED,
+            "true",
+        ];
         process.stdout.write(safeExec(HELPER.all, { args }));
         return;
     }
@@ -82,25 +89,17 @@ async function main() {
         process.exit(0);
     }
 
-    // 过滤掉用户传入的 --type/-t（统一用 config 账号的 type）
-    const childArgs = [];
-    for (let i = 0; i < args.length; i++) {
-        if (args[i].startsWith("--type=") || args[i].startsWith("-t=")) {
-            continue;
-        }
-        if (args[i] === "--type" || args[i] === "-t") {
-            i++;
-            continue;
-        }
-        childArgs.push(args[i]);
+    // 只传必要参数（hide 走子脚本默认 false，保留用完账号的显示）
+    const childArgs = [
+        ARGS.POSITION,
+        String(matched.index),
+        ARGS.DISPLAY,
+        display,
+    ];
+    // ark 账号透传 type，opencode 无 type 字段
+    if (matched.account.type) {
+        childArgs.push(ARGS.TYPE, matched.account.type);
     }
-
-    // 账号 type 为有效套餐类型时透传，否则子脚本走默认 coding
-    if (Object.values(TYPE).includes(matched.account.type)) {
-        childArgs.push("--type", matched.account.type);
-    }
-
-    childArgs.push("--position", String(matched.index));
     process.stdout.write(safeExec(matched.file, { args: childArgs }));
 }
 

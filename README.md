@@ -39,13 +39,13 @@ coding-plan-usage-query/
 │   └── config.schema.json                 # JSON Schema 校验
 └── src/
     ├── query/
-    │   ├── query-usage-all.bat            # Windows 双击运行
+    │   ├── query-usage-all.cmd            # Windows 双击运行，使用 GBK 编码，方便输出中文
     │   ├── query-usage-all.mjs            # 并行查询全部套餐
     │   ├── query-usage-ark.mjs            # 火山方舟用量查询
     │   ├── query-usage-opencode-go.mjs    # OpenCodeGo 用量查询
     │   └── query-usage-smart.mjs          # 按 CC-Switch 自动匹配
     ├── tools/
-    │   └── get-actual-model.mjs           # 反推真实模型名称
+    │   └── get-actual-model.mjs           # 获取真实模型名称
     └── utils/
         ├── utils-query-usage.mjs           # 共享工具函数
         └── utils-cc-switch.mjs             # CC-Switch 工具
@@ -94,11 +94,12 @@ node src/query/query-usage-ark.mjs --position 1
 
 ## 命令行参数
 
-|     参数     | 缩写 | 说明                                                         |
-| :----------: | :--: | ------------------------------------------------------------ |
-| `--display`  | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`） |
-|   `--type`   | `-t` | 火山方舟套餐类型：`coding`（默认，`c`）/ `agent`（`a`）      |
-| `--position` | `-p` | 账号位置（从 0 开始，默认 0）                                |
+|             参数              | 缩写 | 说明                                                                     |
+| :---------------------------: | :--: | ------------------------------------------------------------------------ |
+|          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）             |
+|           `--type`            | `-t` | 火山方舟套餐类型：`coding`（默认，`c`）/ `agent`（`a`）                  |
+|         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                            |
+| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时不输出（`true`/`false`，默认 `false`，smart 脚本忽略该参数） |
 
 ## 配置文件说明
 
@@ -168,7 +169,7 @@ node src/query/query-usage-ark.mjs --position 1
 `query-usage-smart.mjs` 的工作流程：
 
 1. 读取 `~/.cc-switch/settings.json` 的 `currentProviderClaude` 获取当前供应商
-2. 读取 `~/.cc-switch/cc-switch.db` 获取当前供应商的 API Key
+2. 获取当前供应商的 API Key（优先环境变量 `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`，代理模式回退查询 `~/.cc-switch/cc-switch.db`）
 3. 在 `config.json` 中匹配 `apiKey` 字段相同的账号
 4. 调用对应子脚本查询用量
 

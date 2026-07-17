@@ -39,13 +39,13 @@ coding-plan-usage-query/
 │   └── config.schema.json                 # JSON Schema validation
 └── src/
     ├── query/
-    │   ├── query-usage-all.bat            # Double-click to run (Windows)
+    │   ├── query-usage-all.cmd            # Double-click to run (Windows; GBK encoding for Chinese output)
     │   ├── query-usage-all.mjs            # Query all plans in parallel
     │   ├── query-usage-ark.mjs            # Volcengine Ark query
     │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
     │   └── query-usage-smart.mjs          # Auto-match via CC-Switch
     ├── tools/
-    │   └── get-actual-model.mjs           # Resolve actual model name
+    │   └── get-actual-model.mjs           # Get actual model name
     └── utils/
         ├── utils-query-usage.mjs           # Shared utilities
         └── utils-cc-switch.mjs             # CC-Switch utilities
@@ -94,11 +94,12 @@ node src/query/query-usage-ark.mjs --position 1
 
 ## Command Line Arguments
 
-|   Argument   | Short | Description                                                        |
-| :----------: | :---: | ------------------------------------------------------------------ |
-| `--display`  | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`) |
-|   `--type`   | `-t`  | Volcengine Ark plan type: `coding` (default, `c`) / `agent` (`a`)  |
-| `--position` | `-p`  | Account position (0-indexed, default 0)                            |
+|           Argument            | Short | Description                                                                                             |
+| :---------------------------: | :---: | ------------------------------------------------------------------------------------------------------- |
+|          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                      |
+|           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (default, `c`) / `agent` (`a`)                                       |
+|         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                 |
+| `--hide-on-monthly-exhausted` |   -   | Skip output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script) |
 
 ## Configuration
 
@@ -168,7 +169,7 @@ node src/query/query-usage-ark.mjs --position 1
 `query-usage-smart.mjs` workflow:
 
 1. Read `currentProviderClaude` from `~/.cc-switch/settings.json` to get the current provider
-2. Read `~/.cc-switch/cc-switch.db` to get the current provider's API Key
+2. Get the current provider's API Key (prioritize env vars `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`; fall back to `~/.cc-switch/cc-switch.db` in proxy mode)
 3. Match the account with the same `apiKey` in `config.json`
 4. Run the corresponding query script
 

@@ -2,8 +2,11 @@
  * @file 通过 Claude 配置文件反推真实模型名称
  *
  * 从 ccstatusline-zh 的标准输入接收 JSON
- * 结合 ~/.claude/settings.json 的 ANTHROPIC_BASE_URL 判断是否处于路由模式，
- * 直连模式直接输出 display_name，路由模式遍历 settings.json 中配对的 *_MODEL_NAME/_MODEL，按 display_name 匹配后输出真实模型名
+ * 结合 ANTHROPIC_BASE_URL 判断是否处于路由模式
+ *   ANTHROPIC_BASE_URL 优先取环境变量，回退 settings.json
+ * 直连模式直接输出 display_name
+ * 路由模式遍历 settings.json 中配对的 *_MODEL_NAME/_MODEL
+ * 按 display_name 匹配后输出真实模型名
  *
  * 用法:
  *   node get-actual-model.mjs
@@ -58,7 +61,9 @@ function main() {
         return;
     }
 
-    const baseUrl = cfg?.env?.ANTHROPIC_BASE_URL || "";
+    // 路由模式判定：环境变量优先，回退 settings.json
+    const baseUrl =
+        process.env.ANTHROPIC_BASE_URL || cfg?.env?.ANTHROPIC_BASE_URL || "";
 
     // 路由模式：遍历 env 中配对的 MODEL_NAME/MODEL，按 display_name 匹配后拼上 [xxx] 后缀
     if (/:\/\/(127\.0\.0\.1|localhost)/.test(baseUrl)) {
