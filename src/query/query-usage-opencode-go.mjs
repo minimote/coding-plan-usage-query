@@ -10,6 +10,7 @@
  * 参数:
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --position / -p   账号位置（0 开始，默认 0）
+ *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
  */
 
 import {
@@ -187,7 +188,12 @@ async function fetchUsage(authCookie, workspaceID) {
 // #region 脚本入口 ----------------
 
 async function main() {
-    const { display, position } = parseArgs(process.argv);
+    const {
+        display,
+        position,
+        hideOnMonthlyExhausted: hide,
+    } = parseArgs(process.argv);
+
     gDisplay = display;
 
     const cfg = loadConfig();
@@ -201,13 +207,16 @@ async function main() {
     const usage = await fetchUsage(authCookie, workspaceID);
 
     const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
-    console.log(renderWindows(usage, display, prefixes));
+    const output = renderWindows(usage, display, prefixes, hide);
+    if (output) {
+        console.log(output);
+    }
 }
 
 main().catch((err) => {
     const mode = gDisplay === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
     const prefix = DEFAULT_LABELS[KEY][mode];
-    console.log(`${prefix} | ❌ ${err.message}`);
+    console.log(`\x1b[38;2;177;185;249m${prefix}\x1b[0m | ❌ ${err.message}`);
 });
 
 // #endregion 脚本入口 --------------------------------

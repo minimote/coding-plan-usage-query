@@ -11,6 +11,7 @@
  *   --type / -t       套餐类型：coding(c,默认) | agent(a)
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --position / -p   账号位置（0 开始，默认 0）
+ *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
  */
 
 import {
@@ -293,14 +294,29 @@ function parseAfpResponse(data) {
 // #region 格式适配 ----------------
 
 /**
- * TierItem[] → renderWindows 入参并输出
+ * 查询用量，返回 renderWindows 可直接消费的格式
  *
- * @param {TierItem[]} tiers
- * @param {{ long: string, short: string }} prefixes
- * @param {"auto" | "long" | "short"} display
- * @returns {string}
+ * 整合 API 调用 → 响应解析 → 时间戳转倒计时秒数
+ *
+ * @param {string} ak  AccessKey ID
+ * @param {string} sk  SecretAccessKey
+ * @param {"coding" | "agent"} type 套餐类型
+ * @returns {Promise<{
+ *     rolling: ({ pct: number, sec: number } | null),
+ *     weekly: ({ pct: number, sec: number } | null),
+ *     monthly: ({ pct: number, sec: number } | null)
+ * }>}
  */
-function renderOutput(tiers, prefixes, display) {
+async function fetchUsage(ak, sk, type) {
+    const apiAction =
+        type === TYPE.CODING ? "GetCodingPlanUsage" : "GetAFPUsage";
+    const data = await callOpenApi(apiAction, ak, sk);
+
+    const tiers =
+        type === TYPE.CODING
+            ? parseCodingPlanResponse(data)
+            : parseAfpResponse(data).tiers;
+
     if (!tiers || tiers.length === 0) {
         throw new Error("无活跃套餐");
     }
@@ -324,15 +340,11 @@ function renderOutput(tiers, prefixes, display) {
         return { pct: item.percent, sec };
     };
 
-    return renderWindows(
-        {
-            rolling: getUsage("session"),
-            weekly: getUsage("weekly"),
-            monthly: getUsage("monthly"),
-        },
-        display,
-        prefixes,
-    );
+    return {
+        rolling: getUsage("session"),
+        weekly: getUsage("weekly"),
+        monthly: getUsage("monthly"),
+    };
 }
 
 // #endregion 格式适配 --------------------------------
@@ -340,7 +352,12 @@ function renderOutput(tiers, prefixes, display) {
 // #region 脚本入口 ----------------
 
 async function main() {
-    const { display, type: argType, position } = parseArgs(process.argv);
+    const {
+        display,
+        type: argType,
+        position,
+        hideOnMonthlyExhausted: hide,
+    } = parseArgs(process.argv);
     gDisplay = display;
 
     // 提前用命令行 --type 初始化，早期出错时 catch 能拿到正确标签
@@ -366,23 +383,18 @@ async function main() {
 
     const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
 
-    const apiAction =
-        type === TYPE.CODING ? "GetCodingPlanUsage" : "GetAFPUsage";
-    const data = await callOpenApi(apiAction, ak, sk);
-
-    const tiers =
-        type === TYPE.CODING
-            ? parseCodingPlanResponse(data)
-            : parseAfpResponse(data).tiers;
-
-    console.log(renderOutput(tiers, prefixes, display));
+    const usage = await fetchUsage(ak, sk, type);
+    const output = renderWindows(usage, display, prefixes, hide);
+    if (output) {
+        console.log(output);
+    }
 }
 
 main().catch((err) => {
     const labels = DEFAULT_LABELS[KEY][gType];
     const mode = gDisplay === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
     const prefix = labels[mode];
-    console.log(`${prefix} | ❌ ${err.message}`);
+    console.log(`\x1b[38;2;177;185;249m${prefix}\x1b[0m | ❌ ${err.message}`);
 });
 
 // #endregion 脚本入口 --------------------------------

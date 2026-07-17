@@ -9,9 +9,15 @@
  * 参数:
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --type / -t       套餐类型：coding(c,默认) | agent(a)
+ *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
  */
 
-import { safeExecAsync, SCRIPTS, loadConfig } from "../utils/utils-query-usage.mjs";
+import {
+    safeExecAsync,
+    SCRIPTS,
+    ARGS,
+    loadConfig,
+} from "../utils/utils-query-usage.mjs";
 
 // #region 脚本入口 ----------------
 
@@ -29,7 +35,7 @@ async function main() {
         }
 
         for (let i = 0; i < accounts.length; i++) {
-            const args = [...userArgs, "--position", String(i)];
+            const args = [...userArgs, ARGS.POSITION, String(i)];
             tasks.push(safeExecAsync(file, { args }));
         }
     }
@@ -39,7 +45,7 @@ async function main() {
         return;
     }
 
-    const outputs = await Promise.all(tasks);
+    const outputs = (await Promise.all(tasks)).filter((s) => s !== "");
     process.stdout.write(outputs.join("\n"));
 }
 

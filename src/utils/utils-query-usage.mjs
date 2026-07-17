@@ -80,8 +80,12 @@ export const HELPER = Object.freeze({
  */
 export const ARGS = Object.freeze({
     TYPE: "--type",
+    TYPE_SHORT: "-t",
     DISPLAY: "--display",
+    DISPLAY_SHORT: "-d",
     POSITION: "--position",
+    POSITION_SHORT: "-p",
+    HIDE_ON_MONTHLY_EXHAUSTED: "--hide-on-monthly-exhausted",
 });
 
 /**
@@ -97,7 +101,11 @@ export const CONFIG_PATH = join(
 );
 
 const QUERY_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "query");
-export const TOOLS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "tools");
+export const TOOLS_DIR = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "tools",
+);
 
 /**
  * 各应用默认长/短标签
@@ -135,7 +143,7 @@ export const DEFAULT_LABELS = deepFreeze({
 /**
  * 命令行参数解析
  *
- * 返回 { display, type, position }
+ * 返回 { display, type, position, hideOnMonthlyExhausted }
  * --type 可不传，opencode 脚本忽略 type 即可
  * 参数非法时抛出 Error，由调用方的 catch 处理
  *
@@ -144,6 +152,7 @@ export const DEFAULT_LABELS = deepFreeze({
  *     display: "auto" | "long" | "short",
  *     type: "coding" | "agent",
  *     position: number,
+ *     hideOnMonthlyExhausted: boolean,
  * }}
  */
 export function parseArgs(argv) {
@@ -159,17 +168,22 @@ export function parseArgs(argv) {
             options: {
                 [ARGS.DISPLAY.slice(2)]: {
                     type: "string",
-                    short: "d",
+                    short: ARGS.DISPLAY_SHORT.slice(1),
                     default: DISPLAY.AUTO,
                 },
                 [ARGS.TYPE.slice(2)]: {
                     type: "string",
-                    short: "t",
+                    short: ARGS.TYPE_SHORT.slice(1),
+                    default: TYPE.CODING,
                 },
                 [ARGS.POSITION.slice(2)]: {
                     type: "string",
-                    short: "p",
+                    short: ARGS.POSITION_SHORT.slice(1),
                     default: "0",
+                },
+                [ARGS.HIDE_ON_MONTHLY_EXHAUSTED.slice(2)]: {
+                    type: "string",
+                    default: "false",
                 },
             },
         });
@@ -195,7 +209,10 @@ export function parseArgs(argv) {
             throw new Error(`${ARGS.POSITION} 取值非法: ${posRaw}`);
         }
     }
-    return { display, type, position };
+    const hide = parsed.values[ARGS.HIDE_ON_MONTHLY_EXHAUSTED.slice(2)];
+    const hideOnMonthlyExhausted = hide === "true";
+
+    return { display, type, position, hideOnMonthlyExhausted };
 }
 
 /**
@@ -458,7 +475,21 @@ function getVisibleWidth(s) {
  * @param {{ long: string, short: string }} [prefixes] 可选，提供时返回 "前缀 | 窗口文本"
  * @returns {string}
  */
-export function renderWindows(usage, display, prefixes) {
+export function renderWindows(
+    usage,
+    display,
+    prefixes,
+    hideOnMonthlyExhausted = false,
+) {
+    // 月用量用尽时整体隐藏（monthly 为 null 时无月度数据，不隐藏）
+    if (
+        hideOnMonthlyExhausted &&
+        usage.monthly !== null &&
+        Math.round(usage.monthly.pct) >= 100
+    ) {
+        return "";
+    }
+
     if (display === DISPLAY.AUTO) {
         const width = getTermWidth();
         if (width) {
@@ -470,6 +501,7 @@ export function renderWindows(usage, display, prefixes) {
                 },
                 DISPLAY.LONG,
                 prefixes,
+                hideOnMonthlyExhausted,
             );
             const plain = longText.replace(/\x1b\[[\d;]*m/g, "");
             // 给前后留出 5 字符的间距
@@ -478,7 +510,12 @@ export function renderWindows(usage, display, prefixes) {
                 return longText;
             }
         }
-        return renderWindows(usage, DISPLAY.SHORT, prefixes);
+        return renderWindows(
+            usage,
+            DISPLAY.SHORT,
+            prefixes,
+            hideOnMonthlyExhausted,
+        );
     }
 
     const labels =
@@ -501,7 +538,8 @@ export function renderWindows(usage, display, prefixes) {
     if (prefixes) {
         const prefix =
             display === DISPLAY.SHORT ? prefixes.short : prefixes.long;
-        return `${prefix} | ${windowsText}`;
+        // 前缀用薰衣草蓝
+        return `\x1b[38;2;177;185;249m${prefix}\x1b[0m | ${windowsText}`;
     }
     return windowsText;
 }
