@@ -37,19 +37,23 @@ coding-plan-usage-query/
 ├── config/
 │   ├── config.example.json                # Config template
 │   └── config.schema.json                 # JSON Schema validation
-└── src/
-    ├── query/
-    │   ├── query-usage-all.cmd            # Double-click to run (Windows; GBK encoding for Chinese output)
-    │   ├── query-usage-all.mjs            # Query all plans in parallel
-    │   ├── query-usage-ark.mjs            # Volcengine Ark query
-    │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
-    │   └── query-usage-smart.mjs          # Auto-match via CC-Switch
-    ├── tools/
-    │   └── get-actual-model.mjs           # Get actual model name
-    └── utils/
-        ├── utils-query-usage.mjs           # Shared utilities
-        └── utils-cc-switch.mjs             # CC-Switch utilities
+├── src/
+│   ├── query/
+│   │   ├── query-usage-all.cmd            # Double-click to run (Windows; GBK encoding for Chinese output)
+│   │   ├── query-usage-all.mjs            # Query all plans (parallel)
+│   │   ├── query-usage-ark.mjs            # Volcengine Ark query
+│   │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
+│   │   └── query-usage-smart.mjs          # Auto-match via CC-Switch (with 5s cache)
+│   ├── tools/
+│   │   └── get-actual-model.mjs           # Get actual model name
+│   └── utils/
+│       ├── utils-query-usage.mjs           # Shared utilities
+│       └── utils-cc-switch.mjs             # CC-Switch utilities
+├── test/                                  # Unit tests (node --test)
+└── tmp/                                   # Query result cache (auto-generated, gitignored)
 ```
+
+Each query script follows a "exported function + CLI shell" dual-entry pattern: it can be run directly with `node`, and is also called in-process by `smart`/`all` to avoid child-process startup overhead.
 
 ## Prerequisites
 
@@ -79,10 +83,10 @@ node src/query/query-usage-smart.mjs
 # Query all plans
 node src/query/query-usage-all.mjs
 
-# Volcengine Ark Coding Plan (default)
+# Volcengine Ark (uses account's `type`, defaults to coding)
 node src/query/query-usage-ark.mjs
 
-# Volcengine Ark Agent Plan
+# Volcengine Ark Agent Plan (override)
 node src/query/query-usage-ark.mjs --type agent
 
 # OpenCodeGo
@@ -94,12 +98,12 @@ node src/query/query-usage-ark.mjs --position 1
 
 ## Command Line Arguments
 
-|           Argument            | Short | Description                                                                                             |
-| :---------------------------: | :---: | ------------------------------------------------------------------------------------------------------- |
-|          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                      |
-|           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (default, `c`) / `agent` (`a`)                                       |
-|         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                 |
-| `--hide-on-monthly-exhausted` |   -   | Skip output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script) |
+|           Argument            | Short | Description                                                                                                                                |
+| :---------------------------: | :---: | ------------------------------------------------------------------------------------------------------------------------------------------ |
+|          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                                                         |
+|           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (`c`) / `agent` (`a`); falls back to the account's `type`, then `coding` (ignored by all/smart scripts) |
+|         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                    |
+| `--hide-on-monthly-exhausted` |   -   | Skip output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script)                                    |
 
 ## Configuration
 
@@ -171,10 +175,11 @@ node src/query/query-usage-ark.mjs --position 1
 1. Read `currentProviderClaude` from `~/.cc-switch/settings.json` to get the current provider
 2. Get the current provider's API Key (prioritize env vars `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`; fall back to `~/.cc-switch/cc-switch.db` in proxy mode)
 3. Match the account with the same `apiKey` in `config.json`
-4. Run the corresponding query script
+4. Call the corresponding query function in-process
 
 > When a free model is detected, all accounts are displayed instead
 > If no matching account is found, the script exits silently (no output)
+> Query results are cached for 5 seconds (`tmp/usage-cache.json`) to reduce upstream API calls under frequent refreshes; running the sub-scripts manually always queries live
 
 ## Usage with ccstatusline / ccstatusline-zh
 

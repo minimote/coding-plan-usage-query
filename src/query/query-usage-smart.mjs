@@ -1,8 +1,9 @@
 /**
- * @file 根据 CC-Switch 当前供应商智能路由到对应用量查询脚本
+ * @file 根据 CC-Switch 当前供应商智能路由到对应用量查询函数
  *
- * 从 CC-Switch 读取当前供应商的 API Key，在 config 中匹配账号位置，调用对应子脚本
+ * 从 CC-Switch 读取当前供应商的 API Key，在 config 中匹配账号位置，调用对应查询函数
  * 检测到免费模型时显示全部账号用量
+ * 查询结果带短时缓存，减少高频刷新下的重复请求
  *
  * 用法:
  *   node query-usage-smart.mjs
@@ -12,16 +13,10 @@
  */
 
 import { readFileSync } from "fs";
-import {
-    ARGS,
-    SCRIPTS,
-    HELPER,
-    TOOLS_DIR,
-    loadConfig,
-    safeExec,
-    parseArgs,
-} from "../utils/utils-query-usage.mjs";
+import { loadConfig, parseArgs, isMainModule } from "../utils/utils-query-usage.mjs";
 import { getAPIKey } from "../utils/utils-cc-switch.mjs";
+import { getActualModel } from "../tools/get-actual-model.mjs";
+import { queryAll, QUERY_FNS } from "./query-usage-all.mjs";
 
 // #region 免费模型判断 ----------------
 
@@ -45,8 +40,7 @@ function isFreeModel() {
     if (!raw || raw.trim() === "") {
         return false;
     }
-    const result = safeExec(HELPER.actualModel, { input: raw, dir: TOOLS_DIR });
-    return result.toLowerCase().includes("free");
+    return getActualModel(raw).toLowerCase().includes("free");
 }
 
 // #endregion 免费模型判断 --------------------------------
@@ -58,13 +52,13 @@ async function main() {
 
     // 使用免费模型时查询全部账号，强制隐藏月度用完的账号
     if (isFreeModel()) {
-        const args = [
-            ARGS.DISPLAY,
-            display,
-            ARGS.HIDE_ON_MONTHLY_EXHAUSTED,
-            "true",
-        ];
-        process.stdout.write(safeExec(HELPER.all, { args }));
+        process.stdout.write(
+            await queryAll({
+                display,
+                hideOnMonthlyExhausted: true,
+                cache: true,
+            }),
+        );
         return;
     }
 
@@ -72,14 +66,14 @@ async function main() {
     const cfg = loadConfig();
 
     let matched = null;
-    for (const [key, file] of Object.entries(SCRIPTS)) {
+    for (const [key, queryFn] of Object.entries(QUERY_FNS)) {
         const accounts = cfg[key];
         if (!Array.isArray(accounts)) {
             continue;
         }
         const idx = accounts.findIndex((a) => a.apiKey && a.apiKey === apiKey);
         if (idx >= 0) {
-            matched = { file, index: idx, account: accounts[idx] };
+            matched = { queryFn, index: idx, account: accounts[idx] };
             break;
         }
     }
@@ -89,22 +83,20 @@ async function main() {
         process.exit(0);
     }
 
-    // 只传必要参数（hide 走子脚本默认 false，保留用完账号的显示）
-    const childArgs = [
-        ARGS.POSITION,
-        String(matched.index),
-        ARGS.DISPLAY,
-        display,
-    ];
-    // ark 账号透传 type，opencode 无 type 字段
-    if (matched.account.type) {
-        childArgs.push(ARGS.TYPE, matched.account.type);
-    }
-    process.stdout.write(safeExec(matched.file, { args: childArgs }));
+    // hide 走默认 false，保留用完账号的显示；type 由查询函数回退到账号配置
+    process.stdout.write(
+        await matched.queryFn({
+            position: matched.index,
+            display,
+            cache: true,
+        }),
+    );
 }
 
-main().catch((err) => {
-    console.log(`❌ ${err.message}`);
-});
+if (isMainModule(import.meta.url)) {
+    main().catch((err) => {
+        process.stdout.write(`❌ ${err.message}\n`);
+    });
+}
 
 // #endregion 脚本入口 --------------------------------

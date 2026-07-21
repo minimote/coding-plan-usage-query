@@ -8,10 +8,12 @@
  *   node query-usage-ark.mjs
  *
  * 参数:
- *   --type / -t       套餐类型：coding(c,默认) | agent(a)
+ *   --type / -t       套餐类型：coding(c) | agent(a)，未传时用账号 type，再回退 coding
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --position / -p   账号位置（0 开始，默认 0）
  *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
+ *
+ * 也可被 import 后调用 queryUsage(options)
  */
 
 import {
@@ -19,23 +21,17 @@ import {
     TYPE,
     KEYS,
     renderWindows,
+    renderErrorLine,
     loadConfig,
     resolvePrefixes,
     DEFAULT_LABELS,
     findAccount,
     parseArgs,
+    fetchUsageCached,
+    writeCache,
+    isMainModule,
 } from "../utils/utils-query-usage.mjs";
 import { createHmac, createHash } from "crypto";
-
-// #region 状态变量 ----------------
-
-/** @type {"auto" | "long" | "short"} */
-let gDisplay = DISPLAY.AUTO;
-
-/** @type {"coding" | "agent"} */
-let gType = TYPE.CODING;
-
-// #endregion 状态变量 --------------------------------
 
 // #region 配置常量 ----------------
 
@@ -231,7 +227,7 @@ async function callOpenApi(action, ak, sk) {
  * @param {object} data
  * @returns {TierItem[]}
  */
-function parseCodingPlanResponse(data) {
+export function parseCodingPlanResponse(data) {
     const result = data.Result || data;
     const windows = result.QuotaUsage;
     if (!Array.isArray(windows)) {
@@ -254,7 +250,7 @@ function parseCodingPlanResponse(data) {
  * @param {object} data
  * @returns {{ planType: string | null, tiers: TierItem[] }}
  */
-function parseAfpResponse(data) {
+export function parseAfpResponse(data) {
     const result = data.Result || data;
     const planType = result.PlanType ? String(result.PlanType).trim() : null;
 
@@ -349,52 +345,105 @@ async function fetchUsage(ak, sk, type) {
 
 // #endregion 格式适配 --------------------------------
 
-// #region 脚本入口 ----------------
+// #region 查询入口 ----------------
 
-async function main() {
+/**
+ * 查询火山方舟用量并返回渲染后的输出行
+ *
+ * 不抛出异常：出错时返回带默认标签前缀的错误字符串，便于调用方保持退出码 0
+ *
+ * @param {object} [options]
+ * @param {number} [options.position=0] 账号位置（0 开始）
+ * @param {"auto" | "long" | "short"} [options.display=DISPLAY.AUTO] 展示档位
+ * @param {"coding" | "agent"} [options.type] 套餐类型；缺省时用账号 type，再缺省用 coding
+ * @param {boolean} [options.hideOnMonthlyExhausted=false] 月度耗尽时隐藏
+ * @param {boolean} [options.cache=false] 启用结果缓存（含错误负缓存）
+ * @returns {Promise<string>} 输出行；隐藏时为空字符串
+ */
+export async function queryUsage(options = {}) {
     const {
-        display,
-        type: argType,
-        position,
-        hideOnMonthlyExhausted: hide,
-    } = parseArgs(process.argv);
-    gDisplay = display;
+        position = 0,
+        display = DISPLAY.AUTO,
+        type: optType,
+        hideOnMonthlyExhausted = false,
+        cache = false,
+    } = options;
 
-    // 提前用命令行 --type 初始化，早期出错时 catch 能拿到正确标签
-    if (Object.values(TYPE).includes(argType)) {
-        gType = argType;
-    }
+    // 出错时 catch 用于选错误前缀的套餐类型，随解析推进逐步细化
+    let effType = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
+    try {
+        const cfg = loadConfig();
+        const account = findAccount(cfg[KEY], position);
 
-    const cfg = loadConfig();
-    const account = findAccount(cfg[KEY], position);
+        // 套餐类型优先级：调用方 type > 账号 type > 默认 coding
+        const type = Object.values(TYPE).includes(optType)
+            ? optType
+            : Object.values(TYPE).includes(account.type)
+              ? account.type
+              : TYPE.CODING;
+        effType = type;
+        const ak = (account.accessKeyId || "").trim();
+        const sk = (account.secretAccessKey || "").trim();
+        if (!ak || !sk) {
+            throw new Error("配置缺少 accessKeyId 或 secretAccessKey");
+        }
 
-    // 套餐类型优先级：命令行 --type > 账号 type > 默认 coding
-    const type = Object.values(TYPE).includes(argType)
-        ? argType
-        : Object.values(TYPE).includes(account.type)
-          ? account.type
-          : TYPE.CODING;
-    gType = type;
-    const ak = (account.accessKeyId || "").trim();
-    const sk = (account.secretAccessKey || "").trim();
-    if (!ak || !sk) {
-        throw new Error("配置缺少 accessKeyId 或 secretAccessKey");
-    }
+        const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
 
-    const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
-
-    const usage = await fetchUsage(ak, sk, type);
-    const output = renderWindows(usage, display, prefixes, hide);
-    if (output) {
-        console.log(output);
+        const result = await fetchUsageCached(
+            `${KEY}:${position}:${type}`,
+            cache,
+            () => fetchUsage(ak, sk, type),
+        );
+        if (result.output !== undefined) {
+            return result.output;
+        }
+        return renderWindows(
+            result.usage,
+            display,
+            prefixes,
+            hideOnMonthlyExhausted,
+        );
+    } catch (err) {
+        const output = renderErrorLine(
+            DEFAULT_LABELS[KEY][effType],
+            display,
+            err.message,
+        );
+        if (cache) {
+            writeCache(`${KEY}:${position}:${effType}`, { output });
+        }
+        return output;
     }
 }
 
-main().catch((err) => {
-    const labels = DEFAULT_LABELS[KEY][gType];
-    const mode = gDisplay === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
-    const prefix = labels[mode];
-    console.log(`\x1b[38;2;177;185;249m${prefix}\x1b[0m | ❌ ${err.message}`);
-});
+// #endregion 查询入口 --------------------------------
 
-// #endregion 脚本入口 --------------------------------
+// #region CLI 壳 ----------------
+
+async function main() {
+    let display = DISPLAY.AUTO;
+    let type = TYPE.CODING;
+    try {
+        const parsed = parseArgs(process.argv);
+        display = parsed.display;
+        if (Object.values(TYPE).includes(parsed.type)) {
+            type = parsed.type;
+        }
+        const output = await queryUsage(parsed);
+        if (output) {
+            console.log(output);
+        }
+    } catch (err) {
+        // queryUsage 不抛错，此处只兜底 parseArgs 失败
+        console.log(
+            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message),
+        );
+    }
+}
+
+if (isMainModule(import.meta.url)) {
+    main();
+}
+
+// #endregion CLI 壳 --------------------------------

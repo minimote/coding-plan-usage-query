@@ -10,34 +10,29 @@
  *
  * 用法:
  *   node get-actual-model.mjs
+ *
+ * 也可被 import 后调用 getActualModel(raw)
  */
 
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { isMainModule } from "../utils/utils-query-usage.mjs";
 
-function main() {
-    // 终端直接运行时 stdin 为 TTY
-    if (process.stdin.isTTY) {
-        process.stdout.write(
-            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
-        );
-        return;
-    }
-    let raw;
-    try {
-        raw = readFileSync(0, "utf8");
-    } catch {
-        process.stdout.write("stdin 读取失败");
-        return;
-    }
+// #region 核心逻辑 ----------------
 
+/**
+ * 从 ccstatusline 传入的 JSON 原文解析真实模型名
+ *
+ * @param {string} raw stdin 收到的 JSON 字符串
+ * @returns {string} 真实模型名；解析失败时返回错误提示字符串
+ */
+export function getActualModel(raw) {
     let j;
     try {
         j = JSON.parse(raw);
     } catch {
-        process.stdout.write(raw ? "JSON 解析失败" : "输入为空");
-        return;
+        return raw ? "JSON 解析失败" : "输入为空";
     }
 
     const display = j?.model?.display_name;
@@ -46,8 +41,7 @@ function main() {
         display === null ||
         String(display).trim() === ""
     ) {
-        process.stdout.write(raw ? "未找到模型名" : "输入为空");
-        return;
+        return raw ? "未找到模型名" : "输入为空";
     }
 
     // 读 settings.json 判断是否路由
@@ -57,8 +51,7 @@ function main() {
     try {
         cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
     } catch {
-        process.stdout.write(String(display));
-        return;
+        return String(display);
     }
 
     // 路由模式判定：环境变量优先，回退 settings.json
@@ -92,21 +85,45 @@ function main() {
 
         // 未匹配到任何 tier，直接输出 display_name
         if (!name) {
-            process.stdout.write(String(display));
-            return;
+            return String(display);
         }
 
         // 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后，如 glm-latest[1M]
         const suffix = String(model).match(/\[.*\]$/);
         if (suffix) {
-            process.stdout.write(`${name}${suffix[0]}`);
-        } else {
-            process.stdout.write(String(name));
+            return `${name}${suffix[0]}`;
         }
-    } else {
-        // 直连模式：直接输出 display_name
-        process.stdout.write(String(display));
+        return String(name);
     }
+    // 直连模式：直接输出 display_name
+    return String(display);
 }
 
-main();
+// #endregion 核心逻辑 --------------------------------
+
+// #region CLI 壳 ----------------
+
+function main() {
+    // 终端直接运行时 stdin 为 TTY
+    if (process.stdin.isTTY) {
+        process.stdout.write(
+            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
+        );
+        return;
+    }
+    let raw;
+    try {
+        raw = readFileSync(0, "utf8");
+    } catch {
+        process.stdout.write("stdin 读取失败");
+        return;
+    }
+
+    process.stdout.write(getActualModel(raw));
+}
+
+if (isMainModule(import.meta.url)) {
+    main();
+}
+
+// #endregion CLI 壳 --------------------------------
