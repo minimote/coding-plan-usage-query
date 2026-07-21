@@ -1,0 +1,18 @@
+{
+    "name": "coding-plan-usage-query",
+    "version": "2.2.0",
+    "description": "火山方舟 Coding/Agent Plan 与 OpenCodeGo 用量查询，适配 ccstatusline 状态栏",
+    "type": "module",
+    "private": true,
+    "engines": {
+        "node": ">=22.13.0"
+    },
+    "scripts": {
+        "query": "node src/query/query-usage-smart.mjs",
+        "query:all": "node src/query/query-usage-all.mjs",
+        "query:ark": "node src/query/query-usage-ark.mjs",
+        "query:opencode": "node src/query/query-usage-opencode-go.mjs",
+        "test": "node --test"
+    },
+    "license": "MIT"
+}

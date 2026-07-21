@@ -37,19 +37,23 @@ coding-plan-usage-query/
 ├── config/
 │   ├── config.example.json                # 配置模板
 │   └── config.schema.json                 # JSON Schema 校验
-└── src/
-    ├── query/
-    │   ├── query-usage-all.cmd            # Windows 双击运行，使用 GBK 编码，方便输出中文
-    │   ├── query-usage-all.mjs            # 并行查询全部套餐
-    │   ├── query-usage-ark.mjs            # 火山方舟用量查询
-    │   ├── query-usage-opencode-go.mjs    # OpenCodeGo 用量查询
-    │   └── query-usage-smart.mjs          # 按 CC-Switch 自动匹配
-    ├── tools/
-    │   └── get-actual-model.mjs           # 获取真实模型名称
-    └── utils/
-        ├── utils-query-usage.mjs           # 共享工具函数
-        └── utils-cc-switch.mjs             # CC-Switch 工具
+├── src/
+│   ├── query/
+│   │   ├── query-usage-all.cmd            # Windows 双击运行，使用 GBK 编码，方便输出中文
+│   │   ├── query-usage-all.mjs            # 查询全部套餐（并行）
+│   │   ├── query-usage-ark.mjs            # 火山方舟用量查询
+│   │   ├── query-usage-opencode-go.mjs    # OpenCodeGo 用量查询
+│   │   └── query-usage-smart.mjs          # 按 CC-Switch 自动匹配（带 5 秒缓存）
+│   ├── tools/
+│   │   └── get-actual-model.mjs           # 获取真实模型名称
+│   └── utils/
+│       ├── utils-query-usage.mjs           # 共享工具函数
+│       └── utils-cc-switch.mjs             # CC-Switch 工具
+├── test/                                  # 单元测试（node --test）
+└── tmp/                                   # 查询结果缓存（自动生成，已 gitignore）
 ```
+
+各查询脚本为「导出函数 + CLI 壳」双入口：既可直接 `node` 运行，也被 `smart`/`all` 以进程内函数调用，避免子进程启动开销。
 
 ## 前置要求
 
@@ -79,10 +83,10 @@ node src/query/query-usage-smart.mjs
 # 查询所有套餐
 node src/query/query-usage-all.mjs
 
-# 火山方舟 Coding Plan（默认）
+# 火山方舟（用账号 type 配置，默认 coding）
 node src/query/query-usage-ark.mjs
 
-# 火山方舟 Agent Plan
+# 火山方舟 Agent Plan（强制指定）
 node src/query/query-usage-ark.mjs --type agent
 
 # OpenCodeGo
@@ -94,12 +98,12 @@ node src/query/query-usage-ark.mjs --position 1
 
 ## 命令行参数
 
-|             参数              | 缩写 | 说明                                                                     |
-| :---------------------------: | :--: | ------------------------------------------------------------------------ |
-|          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）             |
-|           `--type`            | `-t` | 火山方舟套餐类型：`coding`（默认，`c`）/ `agent`（`a`）                  |
-|         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                            |
-| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时不输出（`true`/`false`，默认 `false`，smart 脚本忽略该参数） |
+|             参数              | 缩写 | 说明                                                                                                               |
+| :---------------------------: | :--: | ------------------------------------------------------------------------------------------------------------------ |
+|          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）                                                       |
+|           `--type`            | `-t` | 火山方舟套餐类型：`coding`（`c`）/ `agent`（`a`），未传时用账号 `type` 配置，再回退 `coding`（all/smart 脚本忽略） |
+|         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                                                                      |
+| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时不输出（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                           |
 
 ## 配置文件说明
 
@@ -171,10 +175,11 @@ node src/query/query-usage-ark.mjs --position 1
 1. 读取 `~/.cc-switch/settings.json` 的 `currentProviderClaude` 获取当前供应商
 2. 获取当前供应商的 API Key（优先环境变量 `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`，代理模式回退查询 `~/.cc-switch/cc-switch.db`）
 3. 在 `config.json` 中匹配 `apiKey` 字段相同的账号
-4. 调用对应子脚本查询用量
+4. 进程内调用对应查询函数获取用量
 
 > 检测到免费模型时，改为显示全部账号用量
 > 匹配不到账号时静默退出（不输出任何内容）
+> 查询结果缓存 5 秒（`tmp/usage-cache.json`），高频刷新时减少上游 API 请求；手动运行各子脚本不使用缓存
 
 ## 搭配 ccstatusline / ccstatusline-zh 使用
 

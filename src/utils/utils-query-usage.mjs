@@ -1,15 +1,14 @@
 /**
  * @file 用量查询工具函数
  *
- * 包含枚举常量、参数校验、子进程执行、进度条渲染、终端宽度适配、
+ * 包含枚举常量、参数校验、结果缓存、进度条渲染、终端宽度适配、
  * 倒计时格式、百分比着色、窗口渲染、配置文件、标签解析、账号匹配、
  * 参数解析等公共工具
  */
 
-import { execFile, execFileSync } from "child_process";
-import { readFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { parseArgs as nodeParseArgs } from "util";
 
 // #region 枚举常量 ----------------
@@ -56,25 +55,6 @@ export const KEYS = Object.freeze({
 });
 
 /**
- * 套餐 key 到子脚本文件名的映射
- *
- * key 顺序即 all 脚本的输出顺序
- */
-export const SCRIPTS = Object.freeze({
-    // 套餐脚本
-    [KEYS.OPENCODE]: "query-usage-opencode-go.mjs",
-    [KEYS.ARK]: "query-usage-ark.mjs",
-});
-
-/**
- * 辅助脚本文件名
- */
-export const HELPER = Object.freeze({
-    all: "query-usage-all.mjs",
-    actualModel: "get-actual-model.mjs",
-});
-
-/**
  * 命令行参数名
  * @enum {string}
  */
@@ -89,6 +69,23 @@ export const ARGS = Object.freeze({
 });
 
 /**
+ * ANSI 颜色转义序列
+ * @enum {string}
+ */
+export const COLORS = Object.freeze({
+    RESET: "\x1b[0m",
+    GREEN: "\x1b[32m",
+    YELLOW: "\x1b[33m",
+    RED: "\x1b[31m",
+    /** Claude 橙 #DE7356，80-99% 档 */
+    ORANGE: "\x1b[38;2;222;115;86m",
+    /** 亮白，窗口标签 */
+    LABEL: "\x1b[97m",
+    /** 薰衣草蓝，行前缀 */
+    PREFIX: "\x1b[38;2;177;185;249m",
+});
+
+/**
  * config.json 的绝对路径
  * @type {string}
  */
@@ -98,13 +95,6 @@ export const CONFIG_PATH = join(
     "..",
     "config",
     "config.json",
-);
-
-const QUERY_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "query");
-export const TOOLS_DIR = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "tools",
 );
 
 /**
@@ -144,13 +134,13 @@ export const DEFAULT_LABELS = deepFreeze({
  * 命令行参数解析
  *
  * 返回 { display, type, position, hideOnMonthlyExhausted }
- * --type 可不传，opencode 脚本忽略 type 即可
+ * --type 未传时返回 undefined，由调用方回退到账号 type / 默认 coding
  * 参数非法时抛出 Error，由调用方的 catch 处理
  *
  * @param {string[]} argv process.argv
  * @returns {{
  *     display: "auto" | "long" | "short",
- *     type: "coding" | "agent",
+ *     type: "coding" | "agent" | undefined,
  *     position: number,
  *     hideOnMonthlyExhausted: boolean,
  * }}
@@ -174,7 +164,6 @@ export function parseArgs(argv) {
                 [ARGS.TYPE.slice(2)]: {
                     type: "string",
                     short: ARGS.TYPE_SHORT.slice(1),
-                    default: TYPE.CODING,
                 },
                 [ARGS.POSITION.slice(2)]: {
                     type: "string",
@@ -262,84 +251,150 @@ export function normalizeType(val, { fallback } = {}) {
 
 // #endregion 参数解析 --------------------------------
 
-// #region 子进程 ----------------
+// #region 结果缓存 ----------------
 
 /**
- * 同步执行子脚本并返回其 stdout
- *
- * 子进程失败（超时、崩溃、非零退出）时不抛错，返回错误信息字符串，
- * 便于调用方保持退出码 0
- *
- * @param {string} scriptFile 子脚本文件名（与调用脚本同目录）
- * @param {object} [options] 可选参数对象
- * @param {string} [options.input] 传递给子进程 stdin 的数据
- * @param {number} [options.timeout=5000] 超时毫秒数
- * @param {string[]} [options.args] 传给子脚本的命令行参数
- * @param {string} [options.dir=QUERY_DIR] 子脚本所在目录
- * @returns {string} 子进程 stdout 去除首尾空白；出错时返回 "文件名 | ❌ 查询失败: 原因"
+ * 缓存目录与文件绝对路径（项目根目录下 tmp/，单文件存全部缓存键）
  */
-export function safeExec(
-    scriptFile,
-    { input, timeout = 5000, args = [], dir = QUERY_DIR } = {},
-) {
-    const absPath = join(dir, scriptFile);
-    const opts = {
-        timeout,
-        encoding: "utf8",
+const CACHE_DIR = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "tmp",
+);
+const CACHE_PATH = join(CACHE_DIR, "usage-cache.json");
+
+/**
+ * 缓存有效期（毫秒）
+ *
+ * 高频调用时减少上游 API 请求，且远快于用量数据的实际变化速度
+ */
+export const CACHE_TTL_MS = 5000;
+
+/**
+ * 读取缓存条目
+ *
+ * 缓存文件不存在、JSON 损坏、键不存在或已过期均返回 null（视为无缓存，自愈）
+ * usage 数据的 sec 倒计时会减去已流逝秒数，保证显示无偏差
+ *
+ * @param {string} key 缓存键（如 "ark:0:coding"）
+ * @returns {{ output: string } | { usage: object } | null}
+ *          output 为缓存的错误字符串；usage 为三窗口用量数据
+ */
+export function readCache(key) {
+    let entry;
+    try {
+        entry = JSON.parse(readFileSync(CACHE_PATH, "utf-8"))[key];
+    } catch {
+        return null;
+    }
+    if (!entry || typeof entry.ts !== "number") {
+        return null;
+    }
+    const elapsedMs = Date.now() - entry.ts;
+    if (elapsedMs < 0 || elapsedMs >= CACHE_TTL_MS) {
+        return null;
+    }
+
+    // 错误负缓存：TTL 内直接复用错误输出，避免故障时高频重试轰炸上游
+    if (typeof entry.output === "string") {
+        return { output: entry.output };
+    }
+    if (!entry.usage || typeof entry.usage !== "object") {
+        return null;
+    }
+
+    // 倒计时扣除已流逝秒数
+    const elapsedSec = elapsedMs / 1000;
+    const shift = (w) =>
+        w == null ? null : { pct: w.pct, sec: Math.max(0, w.sec - elapsedSec) };
+    return {
+        usage: {
+            rolling: shift(entry.usage.rolling),
+            weekly: shift(entry.usage.weekly),
+            monthly: shift(entry.usage.monthly),
+        },
     };
-    if (input !== undefined) {
-        opts.input = input;
+}
+
+/**
+ * 写入缓存条目
+ *
+ * 读-改-写整个缓存文件；写入失败静默忽略（缓存只是优化，不影响主流程）
+ *
+ * @param {string} key 缓存键
+ * @param {{ output?: string, usage?: object }} data
+ *        output 为错误字符串（负缓存）；usage 为三窗口用量数据
+ */
+export function writeCache(key, data) {
+    let all = {};
+    try {
+        all = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+        if (typeof all !== "object" || all === null) {
+            all = {};
+        }
+    } catch {
+        /* 文件不存在或损坏，重建 */
+    }
+    all[key] = { ts: Date.now(), ...data };
+    try {
+        mkdirSync(CACHE_DIR, { recursive: true });
+        writeFileSync(CACHE_PATH, JSON.stringify(all));
+    } catch {
+        /* 写入失败忽略 */
+    }
+}
+
+/**
+ * 读缓存或执行实际查询，成功结果自动写缓存
+ *
+ * 命中负缓存时返回 { output }（缓存的错误行），调用方直接输出；
+ * 命中 usage 或实际查询成功时返回 { usage }；
+ * fetchFn 抛出的异常原样透传，由调用方渲染错误行（并按需写负缓存）
+ *
+ * @param {string} key 缓存键
+ * @param {boolean} enabled 是否启用缓存
+ * @param {() => Promise<object>} fetchFn 实际查询函数，返回三窗口 usage
+ * @returns {Promise<{ output: string } | { usage: object }>}
+ */
+export async function fetchUsageCached(key, enabled, fetchFn) {
+    if (enabled) {
+        const hit = readCache(key);
+        if (hit) {
+            return hit;
+        }
+    }
+    const usage = await fetchFn();
+    if (enabled) {
+        writeCache(key, { usage });
+    }
+    return { usage };
+}
+
+// #endregion 结果缓存 --------------------------------
+
+// #region CLI 入口判断 ----------------
+
+/**
+ * 判断模块是否被 node 直接运行（而非被 import）
+ *
+ * 用于「导出函数 + CLI 壳」双入口模式：直接运行时执行 CLI 逻辑
+ *
+ * @param {string} moduleUrl 调用方的 import.meta.url
+ * @returns {boolean}
+ */
+export function isMainModule(moduleUrl) {
+    if (!process.argv[1]) {
+        return false;
     }
     try {
-        return execFileSync("node", [absPath, ...args], opts).trim();
-    } catch (err) {
-        return `${scriptFile} | ❌ 查询失败: ${err.message}`;
+        return moduleUrl === pathToFileURL(process.argv[1]).href;
+    } catch {
+        return false;
     }
 }
 
-/**
- * 异步执行子脚本并返回其 stdout（可并行调用）
- *
- * 基于 execFile 实现真正异步，子进程并发启动，不阻塞事件循环
- *
- * @param {string} scriptFile 子脚本文件名（与调用脚本同目录）
- * @param {object} [options] 可选参数对象
- * @param {string} [options.input] 传递给子进程 stdin 的数据
- * @param {number} [options.timeout=5000] 超时毫秒数
- * @param {string[]} [options.args] 传给子脚本的命令行参数
- * @param {string} [options.dir=QUERY_DIR] 子脚本所在目录
- * @returns {Promise<string>} 子进程 stdout 去除首尾空白；出错时返回 "文件名 | ❌ 查询失败: 原因"
- */
-export async function safeExecAsync(scriptFile, options) {
-    const { input, timeout = 5000, args = [], dir = QUERY_DIR } = options || {};
-    const absPath = join(dir, scriptFile);
-
-    return new Promise((resolve) => {
-        const spawnOpts = {
-            encoding: "utf8",
-            timeout,
-        };
-        const child = execFile(
-            "node",
-            [absPath, ...args],
-            spawnOpts,
-            (err, stdout, _stderr) => {
-                if (err) {
-                    resolve(`${scriptFile} | ❌ 查询失败: ${err.message}`);
-                } else {
-                    resolve(stdout.trim());
-                }
-            },
-        );
-
-        if (input !== undefined && child.stdin) {
-            child.stdin.write(input);
-            child.stdin.end();
-        }
-    });
-}
-
-// #endregion 子进程 --------------------------------
+// #endregion CLI 入口判断 --------------------------------
 
 // #region 渲染 ----------------
 
@@ -362,15 +417,15 @@ export function bar(pct) {
  */
 export function pctColorCode(pct) {
     if (pct >= 100) {
-        return "\x1b[31m";
+        return COLORS.RED;
     }
     if (pct >= 80) {
-        return "\x1b[38;2;222;115;86m";
+        return COLORS.ORANGE;
     }
     if (pct >= 60) {
-        return "\x1b[33m";
+        return COLORS.YELLOW;
     }
-    return "\x1b[32m";
+    return COLORS.GREEN;
 }
 
 /**
@@ -382,7 +437,7 @@ export function pctColorCode(pct) {
  */
 export function pctSegment(pct, display) {
     const color = pctColorCode(pct);
-    const pctStr = `${color}${Math.round(pct)}%\x1b[0m`;
+    const pctStr = `${color}${Math.round(pct)}%${COLORS.RESET}`;
     if (display === DISPLAY.SHORT) {
         return pctStr;
     }
@@ -524,8 +579,8 @@ export function renderWindows(
             : ["五小时", "每周", "每月"];
     const windows = [usage.rolling, usage.weekly, usage.monthly];
     const segs = windows.map((item, i) => {
-        // 标签+冒号用亮白（97）高亮
-        const label = `\x1b[97m${labels[i]}:\x1b[0m`;
+        // 标签+冒号用亮白高亮
+        const label = `${COLORS.LABEL}${labels[i]}:${COLORS.RESET}`;
         if (item === null) {
             return `${label}—`;
         }
@@ -538,10 +593,22 @@ export function renderWindows(
     if (prefixes) {
         const prefix =
             display === DISPLAY.SHORT ? prefixes.short : prefixes.long;
-        // 前缀用薰衣草蓝
-        return `\x1b[38;2;177;185;249m${prefix}\x1b[0m | ${windowsText}`;
+        return `${COLORS.PREFIX}${prefix}${COLORS.RESET} | ${windowsText}`;
     }
     return windowsText;
+}
+
+/**
+ * 渲染错误行："前缀 | ❌ 消息"（前缀薰衣草蓝）
+ *
+ * @param {{ long: string, short: string }} labels 长/短标签
+ * @param {"auto" | "long" | "short"} display 展示档位（auto 按 long 处理）
+ * @param {string} message 错误消息
+ * @returns {string}
+ */
+export function renderErrorLine(labels, display, message) {
+    const mode = display === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
+    return `${COLORS.PREFIX}${labels[mode]}${COLORS.RESET} | ❌ ${message}`;
 }
 
 // #endregion 渲染 --------------------------------

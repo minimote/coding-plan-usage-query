@@ -11,25 +11,24 @@
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --position / -p   账号位置（0 开始，默认 0）
  *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
+ *
+ * 也可被 import 后调用 queryUsage(options)
  */
 
 import {
     DISPLAY,
     KEYS,
     renderWindows,
+    renderErrorLine,
     loadConfig,
     resolvePrefixes,
     DEFAULT_LABELS,
     findAccount,
     parseArgs,
+    fetchUsageCached,
+    writeCache,
+    isMainModule,
 } from "../utils/utils-query-usage.mjs";
-
-// #region 状态变量 ----------------
-
-/** @type {"auto" | "long" | "short"} */
-let gDisplay = DISPLAY.AUTO;
-
-// #endregion 状态变量 --------------------------------
 
 // #region 配置常量 ----------------
 
@@ -100,7 +99,7 @@ function getFieldValue(body, field) {
  *     monthly: { pct:number, sec:number } | null
  * }}
  */
-function parseUsageWindows(html) {
+export function parseUsageWindows(html) {
     const parseWindow = (key) => {
         const body = getWindowObject(html, key + "Usage");
         if (!body) {
@@ -185,38 +184,87 @@ async function fetchUsage(authCookie, workspaceID) {
 
 // #endregion 用量请求 --------------------------------
 
-// #region 脚本入口 ----------------
+// #region 查询入口 ----------------
 
-async function main() {
+/**
+ * 查询 OpenCodeGo 用量并返回渲染后的输出行
+ *
+ * 不抛出异常：出错时返回带默认标签前缀的错误字符串，便于调用方保持退出码 0
+ *
+ * @param {object} [options]
+ * @param {number} [options.position=0] 账号位置（0 开始）
+ * @param {"auto" | "long" | "short"} [options.display=DISPLAY.AUTO] 展示档位
+ * @param {boolean} [options.hideOnMonthlyExhausted=false] 月度耗尽时隐藏
+ * @param {boolean} [options.cache=false] 启用结果缓存（含错误负缓存）
+ * @returns {Promise<string>} 输出行；隐藏时为空字符串
+ */
+export async function queryUsage(options = {}) {
     const {
-        display,
-        position,
-        hideOnMonthlyExhausted: hide,
-    } = parseArgs(process.argv);
+        position = 0,
+        display = DISPLAY.AUTO,
+        hideOnMonthlyExhausted = false,
+        cache = false,
+    } = options;
 
-    gDisplay = display;
+    try {
+        const cfg = loadConfig();
+        const account = findAccount(cfg[KEY], position);
+        const authCookie = (account.authCookie || "").trim();
+        const workspaceID = (account.workspaceID || "").trim();
+        if (!authCookie || !workspaceID) {
+            throw new Error("配置缺少 authCookie 或 workspaceID");
+        }
 
-    const cfg = loadConfig();
-    const account = findAccount(cfg[KEY], position);
-    const authCookie = (account.authCookie || "").trim();
-    const workspaceID = (account.workspaceID || "").trim();
-    if (!authCookie || !workspaceID) {
-        throw new Error("配置缺少 authCookie 或 workspaceID");
-    }
+        const result = await fetchUsageCached(`${KEY}:${position}`, cache, () =>
+            fetchUsage(authCookie, workspaceID),
+        );
+        if (result.output !== undefined) {
+            return result.output;
+        }
 
-    const usage = await fetchUsage(authCookie, workspaceID);
-
-    const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
-    const output = renderWindows(usage, display, prefixes, hide);
-    if (output) {
-        console.log(output);
+        const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
+        return renderWindows(
+            result.usage,
+            display,
+            prefixes,
+            hideOnMonthlyExhausted,
+        );
+    } catch (err) {
+        const output = renderErrorLine(
+            DEFAULT_LABELS[KEY],
+            display,
+            err.message,
+        );
+        if (cache) {
+            writeCache(`${KEY}:${position}`, { output });
+        }
+        return output;
     }
 }
 
-main().catch((err) => {
-    const mode = gDisplay === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
-    const prefix = DEFAULT_LABELS[KEY][mode];
-    console.log(`\x1b[38;2;177;185;249m${prefix}\x1b[0m | ❌ ${err.message}`);
-});
+// #endregion 查询入口 --------------------------------
 
-// #endregion 脚本入口 --------------------------------
+// #region CLI 壳 ----------------
+
+async function main() {
+    let display = DISPLAY.AUTO;
+    try {
+        const parsed = parseArgs(process.argv);
+        display = parsed.display;
+        const output = await queryUsage(parsed);
+        if (output) {
+            console.log(output);
+        }
+    } catch (err) {
+        // queryUsage 不抛错，此处只兜底 parseArgs 失败
+        console.log(
+            renderErrorLine(DEFAULT_LABELS[KEY], display, err.message),
+        );
+    }
+}
+
+if (isMainModule(import.meta.url)) {
+    main();
+}
+
+// #endregion CLI 壳 --------------------------------

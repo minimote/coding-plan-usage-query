@@ -1,5 +1,25 @@
 # 更新日志
 
+## v2.2.0-2026.07.21
+
+### 新增
+
+- 查询结果缓存：smart 入口带 5 秒 TTL 缓存（`tmp/usage-cache.json`，已 gitignore），命中时跳过网络请求，查询失败也写负缓存防止高频重试；手动运行各子脚本仍为实时查询
+- `package.json`：声明 `type: module`、Node 版本要求与 npm scripts
+- 单元测试：`test/` 目录，基于 `node:test`，覆盖渲染、参数解析、缓存、响应解析等纯函数（ark/opencode 的解析函数同步改为导出供测试调用）
+
+### 变更
+
+- 架构重构：子进程调用改为进程内函数调用，各查询脚本改为「导出函数 + CLI 壳」双入口模式，`smart`/`all` 直接 import 调用，全链路零子进程启动开销；各脚本仍可独立运行，输出格式不变
+- `utils-query-usage.mjs`：移除 `safeExec`/`safeExecAsync`/`SCRIPTS`/`HELPER`；新增 `readCache`/`writeCache`/`fetchUsageCached`/`isMainModule`/`renderErrorLine`/`COLORS` 颜色常量
+- `get-actual-model.mjs` 抽出纯函数 `getActualModel(raw)` 供 smart 进程内调用
+- `query-usage-all.mjs` 不再接受 `--type`：各 ark 账号一律用自己的 `type` 配置，避免全局参数覆盖账号配置
+- `query-usage-smart.mjs`：入口改为 `isMainModule` 守卫，错误兜底改用 `process.stdout.write`，与其他脚本统一
+
+### 修复
+
+- 修复 `--type` 命令行默认值覆盖账号 `type` 配置的问题：`parseArgs` 不再为 `--type` 提供默认值，未传时正确回退到账号 `type`，再回退 `coding`
+
 ## v2.1.0-2026.07.18
 
 ### 新增
