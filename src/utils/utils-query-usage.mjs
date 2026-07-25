@@ -52,6 +52,7 @@ export const TYPE = Object.freeze({
 export const KEYS = Object.freeze({
     ARK: "ark",
     OPENCODE: "opencode",
+    QWEN: "qwen",
 });
 
 /**
@@ -106,7 +107,8 @@ export const CONFIG_PATH = join(
  *         coding: { long: string, short: string },
  *         agent: { long: string, short: string }
  *     },
- *     opencode: { long: string, short: string }
+ *     opencode: { long: string, short: string },
+ *     qwen: { long: string, short: string }
  * }}
  */
 export const DEFAULT_LABELS = deepFreeze({
@@ -124,6 +126,30 @@ export const DEFAULT_LABELS = deepFreeze({
         long: "OpenCodeGo",
         short: "Go",
     },
+    qwen: {
+        long: "千问TokenPlan",
+        short: "千问",
+    },
+});
+
+/**
+ * 用量窗口标识
+ * @enum {string}
+ */
+export const WINDOW = Object.freeze({
+    ROLLING: "rolling",
+    WEEKLY: "weekly",
+    MONTHLY: "monthly",
+});
+
+/**
+ * 各窗口的长/短标签
+ * @type {Object<string, { long: string, short: string }>}
+ */
+export const WINDOW_LABELS = deepFreeze({
+    [WINDOW.ROLLING]: { long: "五小时", short: "五" },
+    [WINDOW.WEEKLY]: { long: "每周", short: "周" },
+    [WINDOW.MONTHLY]: { long: "每月", short: "月" },
 });
 
 // #endregion 枚举常量 --------------------------------
@@ -262,7 +288,7 @@ const CACHE_DIR = join(
     "..",
     "tmp",
 );
-const CACHE_PATH = join(CACHE_DIR, "usage-cache.json");
+const CACHE_PATH = join(CACHE_DIR, "cache-usage.json");
 
 /**
  * 缓存有效期（毫秒）
@@ -513,19 +539,16 @@ function getVisibleWidth(s) {
 }
 
 /**
- * 渲染三个用量窗口的完整行（不含前缀），或带前缀的完整行
+ * 渲染用量窗口的完整行（不含前缀），或带前缀的完整行
  *
  * AUTO 档位：渲染长版并测量实际可见长度，放得下用长版否则用短版
  *
- * 各窗口数据为 null 时显示 "标签:—"；非 null 时渲染百分比段和倒计时
+ * 按 WINDOW 定义顺序遍历 usage 中存在的窗口：不含某键则不输出（平台无此窗口）；
+ * 键存在但值为 null 时显示 "标签:--"（数据缺失）；非 null 时渲染百分比段和倒计时
  * 标签+冒号用亮白（97）高亮，百分比按用量分档着色（绿/黄/橙/红），倒计时保持默认色
  * 百分比限制在 0–100，秒数限制为 ≥0
  *
- * @param {{
- *     rolling: ({ pct: number, sec: number } | null),
- *     weekly: ({ pct: number, sec: number } | null),
- *     monthly: ({ pct: number, sec: number } | null)
- * }} usage 三个用量窗口数据对象
+ * @param {Object<string, ({ pct: number, sec: number } | null)>} usage 用量窗口数据，键为 WINDOW 常量值
  * @param {"auto" | "long" | "short"} display 展示档位
  * @param {{ long: string, short: string }} [prefixes] 可选，提供时返回 "前缀 | 窗口文本"
  * @returns {string}
@@ -536,10 +559,10 @@ export function renderWindows(
     prefixes,
     hideOnMonthlyExhausted = false,
 ) {
-    // 月用量用尽时整体隐藏（monthly 为 null 时无月度数据，不隐藏）
+    // 月用量用尽时整体隐藏（monthly 不存在或为 null 时无月度数据，不隐藏）
     if (
         hideOnMonthlyExhausted &&
-        usage.monthly !== null &&
+        usage.monthly != null &&
         Math.round(usage.monthly.pct) >= 100
     ) {
         return "";
@@ -549,11 +572,7 @@ export function renderWindows(
         const width = getTermWidth();
         if (width) {
             const longText = renderWindows(
-                {
-                    rolling: usage.rolling,
-                    weekly: usage.weekly,
-                    monthly: usage.monthly,
-                },
+                usage,
                 DISPLAY.LONG,
                 prefixes,
                 hideOnMonthlyExhausted,
@@ -573,21 +592,20 @@ export function renderWindows(
         );
     }
 
-    const labels =
-        display === DISPLAY.SHORT
-            ? ["五", "周", "月"]
-            : ["五小时", "每周", "每月"];
-    const windows = [usage.rolling, usage.weekly, usage.monthly];
-    const segs = windows.map((item, i) => {
-        // 标签+冒号用亮白高亮
-        const label = `${COLORS.LABEL}${labels[i]}:${COLORS.RESET}`;
-        if (item === null) {
-            return `${label}—`;
-        }
-        const pct = Math.max(0, Math.min(Math.round(item.pct), 100));
-        const sec = Math.max(0, Math.round(item.sec));
-        return `${label}${pctSegment(pct, display)} ↻ ${toCountdown(sec, display)}`;
-    });
+    const mode = display === DISPLAY.SHORT ? "short" : "long";
+    const segs = Object.values(WINDOW)
+        .filter((key) => key in usage)
+        .map((key) => {
+            const item = usage[key];
+            // 标签+冒号用亮白高亮
+            const label = `${COLORS.LABEL}${WINDOW_LABELS[key][mode]}:${COLORS.RESET}`;
+            if (item === null) {
+                return `${label}--`;
+            }
+            const pct = Math.max(0, Math.min(Math.round(item.pct), 100));
+            const sec = Math.max(0, Math.round(item.sec));
+            return `${label}${pctSegment(pct, display)} ↻ ${toCountdown(sec, display)}`;
+        });
     const windowsText = segs.join(" | ");
 
     if (prefixes) {

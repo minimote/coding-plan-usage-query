@@ -102,16 +102,16 @@ test("renderWindows: 三窗口齐全带前缀", () => {
     assert.ok(out.includes("30m"));
 });
 
-test("renderWindows: 窗口数据为 null 显示 标签:—（em dash）", () => {
+test("renderWindows: 窗口数据为 null 显示 标签:--", () => {
     const usage = {
         rolling: null,
         weekly: null,
         monthly: null,
     };
     const out = renderWindows(usage, DISPLAY.SHORT);
-    // 标签后跟 ANSI reset 码，去掉后再断言；null 窗口用 em dash (U+2014)
+    // 标签后跟 ANSI reset 码，去掉后再断言；null 窗口用两个普通连字符
     const plain = out.replace(/\x1b\[[\d;]*m/g, "");
-    const dash = String.fromCodePoint(0x2014);
+    const dash = "--";
     assert.ok(plain.includes(`五:${dash}`));
     assert.ok(plain.includes(`周:${dash}`));
     assert.ok(plain.includes(`月:${dash}`));
@@ -137,6 +137,18 @@ test("renderWindows: monthly 为 null 时不触发隐藏", () => {
     };
     const out = renderWindows(usage, DISPLAY.SHORT, undefined, true);
     assert.notEqual(out, "");
+});
+
+test("renderWindows: usage 缺少某窗口键时不输出该窗口", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        // 不含 monthly -- 平台无此窗口
+    };
+    const out = renderWindows(usage, DISPLAY.SHORT);
+    assert.ok(out.includes("五:"));
+    assert.ok(out.includes("周:"));
+    assert.ok(!out.includes("月:"));
 });
 
 test("renderWindows: AUTO 档窄终端回退 SHORT", () => {

@@ -1,7 +1,7 @@
 {
     "name": "coding-plan-usage-query",
-    "version": "2.2.0",
-    "description": "火山方舟 Coding/Agent Plan 与 OpenCodeGo 用量查询，适配 ccstatusline 状态栏",
+    "version": "2.3.0",
+    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
     "type": "module",
     "private": true,
     "engines": {
@@ -12,7 +12,13 @@
         "query:all": "node src/query/query-usage-all.mjs",
         "query:ark": "node src/query/query-usage-ark.mjs",
         "query:opencode": "node src/query/query-usage-opencode-go.mjs",
+        "query:qwen": "node src/query/query-usage-qwen.mjs",
+        "login:qwen": "node src/login/login-qwen.mjs",
+        "login:opencode": "node src/login/login-opencode.mjs",
         "test": "node --test"
+    },
+    "devDependencies": {
+        "playwright-core": "^1.61.1"
     },
     "license": "MIT"
 }

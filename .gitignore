@@ -1,5 +1,6 @@
 .claude/
 .history/
 tmp/
+node_modules/
 
 config.json

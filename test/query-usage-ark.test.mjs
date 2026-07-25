@@ -4,9 +4,13 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "crypto";
 import {
     parseCodingPlanResponse,
     parseAfpResponse,
+    uriEncode,
+    buildCanonicalQuery,
+    signVolcengine,
 } from "../src/query/query-usage-ark.mjs";
 
 test("parseCodingPlanResponse: 解析三窗口百分比与重置时间戳", () => {
@@ -85,3 +89,92 @@ test("parseAfpResponse: 缺少字段全部跳过，tiers 为空", () => {
     assert.equal(planType, null);
     assert.equal(tiers.length, 0);
 });
+
+// #region 签名工具 ----------------
+
+test("uriEncode: unreserved 字符原样保留", () => {
+    assert.equal(uriEncode("AZaz09-_.~"), "AZaz09-_.~");
+});
+
+test("uriEncode: 保留字符与空格百分号编码（大写 hex）", () => {
+    assert.equal(uriEncode(" "), "%20");
+    assert.equal(uriEncode("/"), "%2F");
+    assert.equal(uriEncode("="), "%3D");
+    assert.equal(uriEncode("&"), "%26");
+    assert.equal(uriEncode("a b=c&d"), "a%20b%3Dc%26d");
+});
+
+test("buildCanonicalQuery: 参数按 key 字母序拼接", () => {
+    assert.equal(
+        buildCanonicalQuery("GetCodingPlanUsage"),
+        "Action=GetCodingPlanUsage&Region=cn-beijing&Version=2024-01-01",
+    );
+    assert.equal(
+        buildCanonicalQuery("GetAFPUsage"),
+        "Action=GetAFPUsage&Region=cn-beijing&Version=2024-01-01",
+    );
+});
+
+test("signVolcengine: xDate 格式与空 body 的 xContentSha256", () => {
+    const now = new Date("2026-07-25T07:02:03.123Z");
+    const { xDate, xContentSha256 } = signVolcengine(
+        "AK",
+        "SK",
+        "cn-beijing",
+        "Action=X",
+        "",
+        now,
+    );
+    assert.equal(xDate, "20260725T070203Z");
+    assert.equal(xContentSha256, createHash("sha256").update("").digest("hex"));
+});
+
+test("signVolcengine: authorization 结构、credential scope 与 64 位 hex 签名", () => {
+    const now = new Date("2026-07-25T07:02:03.123Z");
+    const { authorization } = signVolcengine(
+        "AKTEST",
+        "SKTEST",
+        "cn-beijing",
+        "Action=X",
+        "",
+        now,
+    );
+    assert.ok(
+        authorization.startsWith(
+            "HMAC-SHA256 Credential=AKTEST/20260725/cn-beijing/ark/request, " +
+                "SignedHeaders=host;x-date;x-content-sha256;content-type, Signature=",
+        ),
+    );
+    const signature = authorization.split("Signature=")[1];
+    assert.match(signature, /^[0-9a-f]{64}$/);
+});
+
+test("signVolcengine: 相同输入确定性输出，时间不同则签名不同", () => {
+    const t1 = new Date("2026-07-25T07:02:03.123Z");
+    const t2 = new Date("2026-07-25T08:00:00.000Z");
+    const a = signVolcengine("AK", "SK", "cn-beijing", "Action=X", "", t1);
+    const b = signVolcengine("AK", "SK", "cn-beijing", "Action=X", "", t1);
+    const c = signVolcengine("AK", "SK", "cn-beijing", "Action=X", "", t2);
+    assert.equal(a.authorization, b.authorization);
+    assert.notEqual(a.authorization, c.authorization);
+});
+
+test("signVolcengine: body 变化影响 xContentSha256", () => {
+    const now = new Date("2026-07-25T07:02:03.123Z");
+    const empty = signVolcengine("AK", "SK", "cn-beijing", "Action=X", "", now);
+    const withBody = signVolcengine(
+        "AK",
+        "SK",
+        "cn-beijing",
+        "Action=X",
+        "{}",
+        now,
+    );
+    assert.notEqual(empty.xContentSha256, withBody.xContentSha256);
+    assert.equal(
+        withBody.xContentSha256,
+        createHash("sha256").update("{}").digest("hex"),
+    );
+});
+
+// #endregion 签名工具 --------------------------------

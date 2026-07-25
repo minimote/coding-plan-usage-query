@@ -2,8 +2,8 @@
  * @file 缓存读写单元测试
  *
  * 缓存文件路径在 utils-query-usage.mjs 内由 import.meta.url 计算得到，
- * 指向项目根目录 tmp/usage-cache.json。本测试直接清理该文件后验证
- * 读-改-写、TTL 过期、负缓存、倒计时偏移等行为。
+ * 指向项目根目录 tmp/cache-usage.json，本测试直接清理该文件后验证
+ * 读-改-写、TTL 过期、负缓存、倒计时偏移等行为
  */
 
 import { test } from "node:test";
@@ -18,7 +18,7 @@ import { fileURLToPath } from "url";
 
 // 与 utils-query-usage.mjs 中 CACHE_PATH 保持一致的计算方式
 const CACHE_PATH = fileURLToPath(
-    new URL("../tmp/usage-cache.json", import.meta.url),
+    new URL("../tmp/cache-usage.json", import.meta.url),
 );
 
 import {

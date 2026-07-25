@@ -10,7 +10,7 @@
 <p>
 
 <div align="center">
-    <a href="README.md">中文</a> | English
+    <a href="../README.md">中文</a> | English
     &emsp;----&emsp;
     <a href="https://gitee.com/minimote/coding-plan-usage-query">Gitee</a> | <a href="https://github.com/minimote/coding-plan-usage-query">GitHub</a>
 </div>
@@ -25,10 +25,13 @@
 | :-------------------------------------: | :----------------: |
 | Volcengine Ark Coding Plan / Agent Plan | Volcengine OpenAPI |
 |               OpenCode Go               | HTML page parsing  |
+|      Alibaba Cloud Qwen Token Plan      |   Console Cookie   |
 
 ## Preview
 
 ![Preview](preview.png)
+
+> Run `scripts/preview.cmd` (or `node src/tools/preview.mjs`) to preview the display at various percentage levels in the terminal using mock data — no real account needed.
 
 ## Project Structure
 
@@ -37,20 +40,30 @@ coding-plan-usage-query/
 ├── config/
 │   ├── config.example.json                # Config template
 │   └── config.schema.json                 # JSON Schema validation
+├── scripts/
+│   ├── query-usage-all.cmd                # Double-click to run on Windows (UTF-8 via chcp 65001)
+│   ├── login-qwen.cmd                     # Double-click to log in to Qwen on Windows
+│   ├── login-opencode.cmd                 # Double-click to log in to OpenCodeGo on Windows
+│   └── preview.cmd                        # Double-click to preview display on Windows
 ├── src/
+│   ├── login/
+│   │   ├── login-common.mjs             # Shared login logic (Playwright, profile, config writeback)
+│   │   ├── login-qwen.mjs               # Qwen login
+│   │   └── login-opencode.mjs           # OpenCodeGo login
 │   ├── query/
-│   │   ├── query-usage-all.cmd            # Double-click to run (Windows; GBK encoding for Chinese output)
 │   │   ├── query-usage-all.mjs            # Query all plans (parallel)
 │   │   ├── query-usage-ark.mjs            # Volcengine Ark query
+│   │   ├── query-usage-qwen.mjs           # Qwen Token Plan query
 │   │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
 │   │   └── query-usage-smart.mjs          # Auto-match via CC-Switch (with 5s cache)
 │   ├── tools/
-│   │   └── get-actual-model.mjs           # Get actual model name
+│   │   ├── get-actual-model.mjs           # Get actual model name
+│   │   └── preview.mjs                    # Generate mock usage preview output
 │   └── utils/
 │       ├── utils-query-usage.mjs           # Shared utilities
 │       └── utils-cc-switch.mjs             # CC-Switch utilities
 ├── test/                                  # Unit tests (node --test)
-└── tmp/                                   # Query result cache (auto-generated, gitignored)
+└── tmp/                                   # Query result cache and login profiles (auto-generated, gitignored)
 ```
 
 Each query script follows a "exported function + CLI shell" dual-entry pattern: it can be run directly with `node`, and is also called in-process by `smart`/`all` to avoid child-process startup overhead.
@@ -70,7 +83,8 @@ Copy `config/config.example.json` to `config/config.json`.
 Open `config.json` and fill in credentials according to `config.schema.json`:
 
 - **Volcengine Ark**: Create an AccessKey in the Volcengine console, fill in `accessKeyId` and `secretAccessKey`
-- **OpenCodeGo**: Log in to opencode.ai, extract `auth` from browser cookies, get `workspaceID` from address bar
+- **OpenCodeGo**: Run `login-opencode.cmd` to log in and write the `auth` cookie and `workspaceID` (playwright-core is auto-installed on first run)
+- **Alibaba Cloud Qwen**: Run `login-qwen.cmd` to log in and write the cookie (playwright-core is auto-installed on first run)
 
 See [Configuration](#configuration) below for details.
 
@@ -92,11 +106,25 @@ node src/query/query-usage-ark.mjs --type agent
 # OpenCodeGo
 node src/query/query-usage-opencode-go.mjs
 
+# Alibaba Cloud Qwen (prompts to run login command if cookie expired)
+node src/query/query-usage-qwen.mjs
+
+# Log in to Qwen to refresh cookie (double-click login-qwen.cmd on Windows, or command line)
+npm run login:qwen
+
+# Log in to OpenCodeGo to refresh credentials (double-click login-opencode.cmd on Windows, or command line)
+npm run login:opencode
+
 # Specify account position (0-indexed)
 node src/query/query-usage-ark.mjs --position 1
+
+# Preview display (no real account needed)
+node src/tools/preview.mjs
 ```
 
 ## Command Line Arguments
+
+Query scripts support the following arguments:
 
 |           Argument            | Short | Description                                                                                                                                |
 | :---------------------------: | :---: | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -105,9 +133,11 @@ node src/query/query-usage-ark.mjs --position 1
 |         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                    |
 | `--hide-on-monthly-exhausted` |   -   | Skip output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script)                                    |
 
+> Login scripts (`login-qwen`/`login-opencode`) only support the `--position`/`-p` argument.
+
 ## Configuration
 
-`config/config.json` is a JSON object with two keys: `ark` (Volcengine Ark accounts) and `opencode` (OpenCodeGo accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
+`config/config.json` is a JSON object with three keys: `ark` (Volcengine Ark accounts), `opencode` (OpenCodeGo accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
 
 ### Volcengine Ark
 
@@ -159,14 +189,39 @@ node src/query/query-usage-ark.mjs --position 1
 }
 ```
 
-|           Field            | Required | Description                                       |
-| :------------------------: | :------: | ------------------------------------------------- |
-| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCodeGo`/`Go`      |
-|        `authCookie`        |   Yes    | `auth` value from browser cookies on opencode.ai  |
-|       `workspaceID`        |   Yes    | Workspace ID from the address bar, e.g. `wrk_...` |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account    |
+|           Field            | Required | Description                                                         |
+| :------------------------: | :------: | ------------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCodeGo`/`Go`                        |
+|        `authCookie`        |   Yes    | `auth` cookie from opencode.ai, auto-filled by `login-opencode.cmd` |
+|       `workspaceID`        |   Yes    | Workspace ID, e.g. `wrk_...`, auto-filled by `login-opencode.cmd`   |
+|          `apiKey`          |    No    | CC-Switch API Key for matching current account                      |
 
-> F12 -> Application -> Cookies -> opencode.ai -> auth
+> Run `npm run login:opencode` (or double-click `login-opencode.cmd`) to auto-fill after login
+
+### Alibaba Cloud Qwen
+
+```json
+{
+    "qwen": [
+        {
+            "apiKey": "sk-sp-xxx",
+            "cookie": "cna=xxx; login_qianwenai_ticket=xxx; ...",
+            "longLabel": "千问",
+            "shortLabel": "千问"
+        }
+    ]
+}
+```
+
+|           Field            | Required | Description                                                        |
+| :------------------------: | :------: | ------------------------------------------------------------------ |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `千问TokenPlan`/`千问`                  |
+|          `cookie`          |   Yes    | Qwen console login cookie, auto-filled by running `login-qwen.cmd` |
+|          `apiKey`          |    No    | CC-Switch API Key for matching current account                     |
+
+> Qwen has no public usage-query OpenAPI; the console cookie is used to call an internal data gateway
+> The cookie expires; run `login-qwen.cmd` again to re-login when it expires
+> Login depends on `playwright-core` (devDependency), auto-installed on first run of `login-qwen.cmd`
 
 ## Auto-Match Account
 
@@ -179,7 +234,7 @@ node src/query/query-usage-ark.mjs --position 1
 
 > When a free model is detected, all accounts are displayed instead
 > If no matching account is found, the script exits silently (no output)
-> Query results are cached for 5 seconds (`tmp/usage-cache.json`) to reduce upstream API calls under frequent refreshes; running the sub-scripts manually always queries live
+> Query results are cached for 5 seconds (`tmp/cache-usage.json`) to reduce upstream API calls under frequent refreshes; running the sub-scripts manually always queries live
 
 ## Usage with ccstatusline / ccstatusline-zh
 
@@ -202,4 +257,4 @@ node F:/xxx/query-usage-smart.mjs
 
 ## License
 
-[MIT License](LICENSE)
+[MIT License](../LICENSE)
