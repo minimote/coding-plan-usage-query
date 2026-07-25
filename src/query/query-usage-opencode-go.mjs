@@ -154,7 +154,9 @@ async function fetchUsage(authCookie, workspaceID) {
     });
 
     if (resp.status === 401 || resp.status === 403) {
-        throw new Error(`cookie 已过期或无效(HTTP ${resp.status})`);
+        throw new Error(
+            `cookie 已过期或无效(HTTP ${resp.status})，请运行 login-opencode.cmd 重新登录`,
+        );
     }
     if (!resp.ok) {
         throw new Error(`请求失败(HTTP ${resp.status})`);
@@ -168,7 +170,9 @@ async function fetchUsage(authCookie, workspaceID) {
             html,
         )
     ) {
-        throw new Error("cookie 已过期或无效");
+        throw new Error(
+            "cookie 已过期或无效，请运行 login-opencode.cmd 重新登录",
+        );
     }
 
     const usage = parseUsageWindows(html);
@@ -206,6 +210,8 @@ export async function queryUsage(options = {}) {
         cache = false,
     } = options;
 
+    // 是否已进入网络查询阶段：仅对此后的失败写负缓存（配置类错误不写，原因同 ark）
+    let reachedFetch = false;
     try {
         const cfg = loadConfig();
         const account = findAccount(cfg[KEY], position);
@@ -215,6 +221,7 @@ export async function queryUsage(options = {}) {
             throw new Error("配置缺少 authCookie 或 workspaceID");
         }
 
+        reachedFetch = true;
         const result = await fetchUsageCached(`${KEY}:${position}`, cache, () =>
             fetchUsage(authCookie, workspaceID),
         );
@@ -235,7 +242,7 @@ export async function queryUsage(options = {}) {
             display,
             err.message,
         );
-        if (cache) {
+        if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}`, { output });
         }
         return output;
@@ -253,12 +260,12 @@ async function main() {
         display = parsed.display;
         const output = await queryUsage(parsed);
         if (output) {
-            console.log(output);
+            process.stdout.write(output);
         }
     } catch (err) {
         // queryUsage 不抛错，此处只兜底 parseArgs 失败
-        console.log(
-            renderErrorLine(DEFAULT_LABELS[KEY], display, err.message),
+        process.stdout.write(
+            renderErrorLine(DEFAULT_LABELS[KEY], display, err.message) + "\n",
         );
     }
 }

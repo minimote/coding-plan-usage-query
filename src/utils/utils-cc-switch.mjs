@@ -56,7 +56,9 @@ async function openDb() {
         suppressExperimentalWarning();
         DatabaseSync = (await import("node:sqlite")).DatabaseSync;
     }
-    return new DatabaseSync(DB_PATH, { readOnly: true });
+    // 测试可通过 CC_SWITCH_DB_PATH 重定向到临时 db，避免触碰真实 ~/.cc-switch
+    const dbPath = process.env.CC_SWITCH_DB_PATH || DB_PATH;
+    return new DatabaseSync(dbPath, { readOnly: true });
 }
 
 /**
@@ -85,8 +87,9 @@ export function getCurrentProviderId() {
  * @throws {Error} db 不存在或读取失败
  */
 export async function lookupProviderInDb(id) {
-    const db = await openDb();
+    let db;
     try {
+        db = await openDb();
         return (
             db
                 .prepare(
@@ -96,18 +99,19 @@ export async function lookupProviderInDb(id) {
                 )
                 .get(id, APP_TYPE) || null
         );
+    } catch (e) {
+        throw new Error(`CC-Switch 数据库读取失败: ${e.message}`);
     } finally {
-        db.close();
+        db?.close();
     }
 }
 
 /**
  * 获取指定供应商的 API Key
  *
- * @param {string} [id=getCurrentProviderId()] 供应商 id；默认使用当前供应商 id
  * @returns {Promise<string>} token；获取失败时抛出 Error
  */
-export async function getAPIKey(id = getCurrentProviderId()) {
+export async function getAPIKey() {
     // 优先从环境变量读取
     const env = process.env;
     const envKey = env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY;
@@ -117,16 +121,23 @@ export async function getAPIKey(id = getCurrentProviderId()) {
     }
 
     // 回退到 CC-Switch 数据库
+    // 获取当前供应商 id
+    const id = getCurrentProviderId();
     const row = await lookupProviderInDb(id);
     if (!row) {
         throw new Error(`供应商 "${id}" 未在 CC-Switch 数据库中找到`);
     }
+    let providerEnv;
     try {
-        const providerEnv = JSON.parse(row.settings_config).env || {};
-        return (
-            providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY
-        );
+        providerEnv = JSON.parse(row.settings_config).env || {};
     } catch (error) {
         throw new Error(`无法获取 API Key: ${error.message}`);
     }
+    const key = providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY;
+    if (!key) {
+        throw new Error(
+            `供应商 "${id}" 的 settings_config.env 未配置 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY`,
+        );
+    }
+    return key;
 }

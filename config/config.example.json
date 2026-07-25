@@ -2,27 +2,35 @@
     "$schema": "./config.schema.json",
     "ark": [
         {
+            "shortLabel": "Coding",
+            "longLabel": "火山CodingPlan",
             "apiKey": "xxx",
             "type": "coding",
-            "longLabel": "火山CodingPlan",
-            "shortLabel": "Coding",
             "accessKeyId": "xxx",
             "secretAccessKey": "xxx"
         },
         {
+            "shortLabel": "Agent",
+            "longLabel": "火山AgentPlan",
             "apiKey": "xxx",
             "type": "agent",
-            "longLabel": "火山AgentPlan",
-            "shortLabel": "Agent",
             "accessKeyId": "xxx",
             "secretAccessKey": "xxx"
         }
     ],
     "opencode": [
         {
-            "authCookie": "xxx",
+            "apiKey": "xxx",
             "workspaceID": "wrk_xxx",
-            "apiKey": "xxx"
+            "authCookie": "xxx"
+        }
+    ],
+    "qwen": [
+        {
+            "shortLabel": "千问",
+            "longLabel": "千问",
+            "apiKey": "sk-sp-xxx",
+            "cookie": "xxx"
         }
     ]
 }

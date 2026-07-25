@@ -10,7 +10,7 @@
 <p>
 
 <div align="center">
-    中文 | <a href="README_EN.md">English</a>
+    中文 | <a href="docs/README_EN.md">English</a>
     &emsp;----&emsp;
     <a href="https://gitee.com/minimote/coding-plan-usage-query">Gitee</a> | <a href="https://github.com/minimote/coding-plan-usage-query">GitHub</a>
 </div>
@@ -25,32 +25,45 @@
 | :-------------------------------: | :--------------: |
 | 火山方舟 Coding Plan / Agent Plan | 火山引擎 OpenAPI |
 |            OpenCode Go            |  页面 HTML 解析  |
+|       阿里云千问 Token Plan       |  控制台 Cookie   |
 
 ## 效果预览
 
-![Preview](preview.png)
+![Preview](docs/preview.png)
+
+> 运行 `scripts/preview.cmd`（或 `node src/tools/preview.mjs`）可用模拟数据在终端预览各百分比档位的显示效果，无需真实账号。
 
 ## 项目结构
 
 ```text
 coding-plan-usage-query/
 ├── config/
-│   ├── config.example.json                # 配置模板
-│   └── config.schema.json                 # JSON Schema 校验
+│   ├── config.example.json                 # 配置模板
+│   └── config.schema.json                  # JSON Schema 校验
+├── scripts/
+│   ├── query-usage-all.cmd                 # Windows 双击运行（UTF-8 chcp 65001）
+│   ├── login-qwen.cmd                      # Windows 双击登录千问
+│   ├── login-opencode.cmd                  # Windows 双击登录 OpenCodeGo
+│   └── preview.cmd                         # Windows 双击预览显示效果
 ├── src/
+│   ├── login/
+│   │   ├── login-common.mjs               # 登录公共逻辑（Playwright、profile、写回 config）
+│   │   ├── login-qwen.mjs                 # 千问登录
+│   │   └── login-opencode.mjs             # OpenCodeGo 登录
 │   ├── query/
-│   │   ├── query-usage-all.cmd            # Windows 双击运行，使用 GBK 编码，方便输出中文
 │   │   ├── query-usage-all.mjs            # 查询全部套餐（并行）
 │   │   ├── query-usage-ark.mjs            # 火山方舟用量查询
+│   │   ├── query-usage-qwen.mjs           # 千问 Token Plan 用量查询
 │   │   ├── query-usage-opencode-go.mjs    # OpenCodeGo 用量查询
 │   │   └── query-usage-smart.mjs          # 按 CC-Switch 自动匹配（带 5 秒缓存）
 │   ├── tools/
-│   │   └── get-actual-model.mjs           # 获取真实模型名称
+│   │   ├── get-actual-model.mjs           # 获取真实模型名称
+│   │   └── preview.mjs                    # 生成模拟用量预览输出
 │   └── utils/
 │       ├── utils-query-usage.mjs           # 共享工具函数
 │       └── utils-cc-switch.mjs             # CC-Switch 工具
-├── test/                                  # 单元测试（node --test）
-└── tmp/                                   # 查询结果缓存（自动生成，已 gitignore）
+├── test/                                    # 单元测试（node --test）
+└── tmp/                                     # 查询结果缓存与登录 profile（自动生成，已 gitignore）
 ```
 
 各查询脚本为「导出函数 + CLI 壳」双入口：既可直接 `node` 运行，也被 `smart`/`all` 以进程内函数调用，避免子进程启动开销。
@@ -70,7 +83,8 @@ coding-plan-usage-query/
 打开 `config.json`，按 `config.schema.json` 中的字段说明填入凭据：
 
 - **火山方舟**：在火山引擎控制台创建 AccessKey，填入 `accessKeyId` 和 `secretAccessKey`
-- **OpenCodeGo**：登录后从浏览器 Cookie 中获取 `auth` 值，从地址栏获取 `workspaceID`
+- **OpenCodeGo**：运行 `login-opencode.cmd` 登录账号，脚本自动写入 `auth` cookie 和 `workspaceID`（首次运行会自动安装 playwright-core）
+- **阿里云千问**：运行 `login-qwen.cmd` 登录账号，脚本自动写入 cookie（首次运行会自动安装 playwright-core）
 
 详细说明见下方 [配置文件说明](#配置文件说明)。
 
@@ -92,11 +106,25 @@ node src/query/query-usage-ark.mjs --type agent
 # OpenCodeGo
 node src/query/query-usage-opencode-go.mjs
 
+# 阿里云千问（cookie 失效会提示运行登录命令）
+node src/query/query-usage-qwen.mjs
+
+# 登录千问刷新 cookie（Windows 双击 login-qwen.cmd，或命令行）
+npm run login:qwen
+
+# 登录 OpenCodeGo 刷新凭据（Windows 双击 login-opencode.cmd，或命令行）
+npm run login:opencode
+
 # 指定账号位置（从 0 开始）
 node src/query/query-usage-ark.mjs --position 1
+
+# 预览显示效果（无需真实账号）
+node src/tools/preview.mjs
 ```
 
 ## 命令行参数
+
+查询脚本支持以下参数：
 
 |             参数              | 缩写 | 说明                                                                                                               |
 | :---------------------------: | :--: | ------------------------------------------------------------------------------------------------------------------ |
@@ -105,9 +133,11 @@ node src/query/query-usage-ark.mjs --position 1
 |         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                                                                      |
 | `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时不输出（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                           |
 
+> 登录脚本（`login-qwen`/`login-opencode`）仅支持 `--position`/`-p` 参数。
+
 ## 配置文件说明
 
-配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark` 和 `opencode` 两个数组，分别对应火山方舟和 OpenCodeGo 的账号列表，每个数组支持多账号。`apiKey` 字段用于 `query-usage-smart.mjs` 匹配当前供应商，不使用 smart 脚本可不填。
+配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`opencode`、`qwen` 三个数组，分别对应火山方舟、OpenCodeGo、阿里云千问的账号列表，每个数组支持多账号。`apiKey` 字段用于 `query-usage-smart.mjs` 匹配当前供应商，不使用 smart 脚本可不填。
 
 ### 火山方舟
 
@@ -159,14 +189,39 @@ node src/query/query-usage-ark.mjs --position 1
 }
 ```
 
-|            字段            | 必填 | 说明                                                   |
-| :------------------------: | :--: | ------------------------------------------------------ |
-| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（OpenCodeGo/Go）              |
-|        `authCookie`        |  是  | 登录 opencode.ai/auth 后从浏览器 Cookie 复制 auth 的值 |
-|       `workspaceID`        |  是  | 工作区 ID，登录后在网址栏获取，类似 `wrk_...`          |
-|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号       |
+|            字段            | 必填 | 说明                                                           |
+| :------------------------: | :--: | :------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（OpenCodeGo/Go）                      |
+|        `authCookie`        |  是  | opencode.ai 的 auth cookie，运行 `login-opencode.cmd` 自动填充 |
+|       `workspaceID`        |  是  | 工作区 ID，形如 `wrk_...`，运行 `login-opencode.cmd` 自动填充  |
+|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号               |
 
-> F12 -> 应用程序(Application) -> Cookies -> opencode.ai -> auth
+> 运行 `npm run login:opencode`（或双击 `login-opencode.cmd`）登录后自动写入
+
+### 阿里云千问
+
+```json
+{
+    "qwen": [
+        {
+            "apiKey": "sk-sp-xxx",
+            "cookie": "cna=xxx; login_qianwenai_ticket=xxx; ...",
+            "longLabel": "千问",
+            "shortLabel": "千问"
+        }
+    ]
+}
+```
+
+|            字段            | 必填 | 说明                                                                          |
+| :------------------------: | :--: | ----------------------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（千问TokenPlan/千问）                                |
+|          `cookie`          |  是  | 千问控制台登录 cookie，运行 `login-qwen.cmd` 自动填充                         |
+|          `apiKey`          |  否  | CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填 |
+
+> 千问无公开用量查询 OpenAPI，通过控制台 cookie 调用内部数据网关
+> cookie 会过期，失效后运行 `login-qwen.cmd` 重新登录
+> 登录依赖 `playwright-core`（devDependency），`login-qwen.cmd` 首次运行会自动安装
 
 ## 自动匹配账号
 
@@ -179,7 +234,7 @@ node src/query/query-usage-ark.mjs --position 1
 
 > 检测到免费模型时，改为显示全部账号用量
 > 匹配不到账号时静默退出（不输出任何内容）
-> 查询结果缓存 5 秒（`tmp/usage-cache.json`），高频刷新时减少上游 API 请求；手动运行各子脚本不使用缓存
+> 查询结果缓存 5 秒（`tmp/cache-usage.json`），高频刷新时减少上游 API 请求；手动运行各子脚本不使用缓存
 
 ## 搭配 ccstatusline / ccstatusline-zh 使用
 
@@ -194,7 +249,7 @@ node F:/xxx/query-usage-smart.mjs
 
 ## 更新日志
 
-[CHANGELOG](CHANGELOG.md)
+[CHANGELOG](docs/CHANGELOG.md)
 
 ## 相关项目
 

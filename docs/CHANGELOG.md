@@ -1,5 +1,36 @@
 # 更新日志
 
+## v2.3.0-2026.07.25
+
+### 新增
+
+- 阿里云千问 Token Plan（个人版）用量查询：新增 `src/query/query-usage-qwen.mjs`，通过控制台 cookie 调用内部数据网关，解析五小时 / 每周两个窗口（千问无月度窗口）；cookie 失效时提示运行登录命令重新登录
+- 千问 / OpenCodeGo 自动登录：新增 `src/login/`（`login-qwen.mjs`、`login-opencode.mjs` 及公共逻辑 `login-common.mjs`），用 Playwright 启动系统 Edge 引导登录，按 `key+position` 隔离持久化 profile，登录成功自动写回 `config.json`；`playwright-core` 未安装时自动安装
+- 用量预览工具：新增 `src/tools/preview.mjs`，用模拟数据在终端预览各百分比档位的显示效果，无需真实账号
+- `scripts/` 目录：Windows 双击运行脚本（`chcp 65001` UTF-8），含 `query-usage-all.cmd`、`login-qwen.cmd`、`login-opencode.cmd`、`preview.cmd`
+- `package.json`：新增 `query:qwen` / `login:qwen` / `login:opencode` scripts 与 devDependency `playwright-core`
+- 配置文件：`config.example.json` / `config.schema.json` 新增 `qwen` 账号数组（`cookie` / `apiKey` / `longLabel` / `shortLabel`）
+- 单元测试：新增 `test/query-usage-qwen.test.mjs`（千问响应解析），既有测试随渲染与缓存改动同步更新
+- `test/utils-cc-switch.test.mjs`：用临时 SQLite 文件集成测试 `lookupProviderInDb` 的命中 / 未命中 / `app_type` 过滤 / db 损坏场景
+
+### 变更
+
+- 目录重组：`CHANGELOG.md`、`README_EN.md`、`preview.png` 移至 `docs/`；`query-usage-all.cmd` 从 `src/query/` 移至 `scripts/`
+- 缓存文件改名：`tmp/usage-cache.json` → `tmp/cache-usage.json`
+- 渲染泛化：`utils-query-usage.mjs` 新增 `WINDOW` / `WINDOW_LABELS` 枚举，`renderWindows` 由硬编码三窗口改为按窗口键遍历 `usage` 中存在的窗口——平台无某窗口（如千问无月度）时不输出；缺失数据占位符由 `—` 改为 `--`
+- `query-usage-all.mjs` / `query-usage-smart.mjs` 接入千问，`QUERY_FNS` 输出与匹配顺序为 opencode → ark → qwen
+- `getAPIKey`（`utils-cc-switch.mjs`）移除默认参数 `id = getCurrentProviderId()`，改为在环境变量短路返回之后再获取当前供应商 id（环境变量已有 key 时不再强制读取 `settings.json`）；`settings_config.env` 缺少 key 时给出明确报错
+- OpenCodeGo cookie 过期 / 无效（HTTP 401/403 或页面关键词）时，错误提示明确引导运行 `login-opencode.cmd` 重新登录
+- `.gitignore` 新增忽略 `node_modules/`
+- README 更新：新增千问、登录脚本、预览工具说明与英文版链接
+- 千问非 200 响应读取响应体并附上错误详情（`errorMsg`/`message`），与火山方舟的 `callOpenApi` 错误处理对齐
+- `lookupProviderInDb`（`utils-cc-switch.mjs`）捕获 SQLite 异常并包装为「CC-Switch 数据库读取失败」友好提示，便于定位故障来源
+- `openDb`（`utils-cc-switch.mjs`）支持 `CC_SWITCH_DB_PATH` 环境变量重定向 db 路径，供集成测试注入临时文件
+
+### 修复
+
+- 配置类错误（config 读取失败 / 账号越界 / 缺凭据）不再写负缓存：仅对已进入网络查询阶段后的失败写负缓存，避免无意义的负缓存写入，以及配置在 TTL 内修复后短暂显示旧错误
+
 ## v2.2.0-2026.07.21
 
 ### 新增

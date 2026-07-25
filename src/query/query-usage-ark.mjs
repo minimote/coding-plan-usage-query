@@ -69,7 +69,7 @@ function sha256Hex(data) {
  * @param {string} input
  * @returns {string}
  */
-function uriEncode(input) {
+export function uriEncode(input) {
     let out = "";
     for (let i = 0; i < input.length; i++) {
         const ch = input.charCodeAt(i);
@@ -101,10 +101,10 @@ function uriEncode(input) {
  * @param {string} region 区域
  * @param {string} query  规范化 query string
  * @param {string} body   请求体
+ * @param {Date} [now]    签名时间，默认当前时间（注入以便确定性测试）
  * @returns {{ authorization: string, xDate: string, xContentSha256: string }}
  */
-function signVolcengine(ak, sk, region, query, body) {
-    const now = new Date();
+export function signVolcengine(ak, sk, region, query, body, now = new Date()) {
     const xDate = now
         .toISOString()
         .replace(/[-:]/g, "")
@@ -148,7 +148,7 @@ function signVolcengine(ak, sk, region, query, body) {
  * @param {string} action OpenAPI Action 名
  * @returns {string}
  */
-function buildCanonicalQuery(action) {
+export function buildCanonicalQuery(action) {
     const pairs = [
         ["Action", action],
         ["Region", REGION],
@@ -371,6 +371,10 @@ export async function queryUsage(options = {}) {
 
     // 出错时 catch 用于选错误前缀的套餐类型，随解析推进逐步细化
     let effType = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
+    // 是否已进入网络查询阶段：仅对此后的失败写负缓存。
+    // 配置类错误（loadConfig/findAccount/缺凭据）发生在读缓存点之前，
+    // 写负缓存既不会被命中，还可能在配置于 TTL 内修复后残留旧错误
+    let reachedFetch = false;
     try {
         const cfg = loadConfig();
         const account = findAccount(cfg[KEY], position);
@@ -390,6 +394,7 @@ export async function queryUsage(options = {}) {
 
         const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
 
+        reachedFetch = true;
         const result = await fetchUsageCached(
             `${KEY}:${position}:${type}`,
             cache,
@@ -410,7 +415,7 @@ export async function queryUsage(options = {}) {
             display,
             err.message,
         );
-        if (cache) {
+        if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}:${effType}`, { output });
         }
         return output;
@@ -432,12 +437,12 @@ async function main() {
         }
         const output = await queryUsage(parsed);
         if (output) {
-            console.log(output);
+            process.stdout.write(output);
         }
     } catch (err) {
         // queryUsage 不抛错，此处只兜底 parseArgs 失败
-        console.log(
-            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message),
+        process.stdout.write(
+            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message) + "\n",
         );
     }
 }

@@ -13,7 +13,11 @@
  */
 
 import { readFileSync } from "fs";
-import { loadConfig, parseArgs, isMainModule } from "../utils/utils-query-usage.mjs";
+import {
+    loadConfig,
+    parseArgs,
+    isMainModule,
+} from "../utils/utils-query-usage.mjs";
 import { getAPIKey } from "../utils/utils-cc-switch.mjs";
 import { getActualModel } from "../tools/get-actual-model.mjs";
 import { queryAll, QUERY_FNS } from "./query-usage-all.mjs";

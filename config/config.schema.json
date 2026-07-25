@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft-07/schema#",
     "title": "CodingPlan Usage Query Config",
-    "description": "配置文件，包含火山方舟和 OpenCodeGo 的账号凭据",
+    "description": "配置文件，包含火山方舟、OpenCodeGo 和千问的账号凭据",
     "type": "object",
     "properties": {
         "$schema": {
@@ -16,7 +16,7 @@
                 "type": "object",
                 "properties": {
                     "type": {
-                        "title": "套餐类型: coding | agent",
+                        "title": "套餐类型: coding | agent [选填]",
                         "description": "对应 CodingPlan 和 Agent Plan",
                         "type": "string",
                         "enum": [
@@ -25,27 +25,27 @@
                         ]
                     },
                     "longLabel": {
-                        "title": "长版显示标签",
+                        "title": "长版显示标签 [选填]",
                         "description": "不填则使用默认标签 (火山CodingPlan / 火山AgentPlan)",
                         "type": "string"
                     },
                     "shortLabel": {
-                        "title": "短版显示标签",
+                        "title": "短版显示标签 [选填]",
                         "description": "不填则使用默认标签 (Coding / Agent)",
                         "type": "string"
                     },
                     "accessKeyId": {
-                        "title": "火山引擎 AccessKey ID",
+                        "title": "火山引擎 AccessKey ID <必填>",
                         "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
                         "type": "string"
                     },
                     "secretAccessKey": {
-                        "title": "火山引擎 SecretAccessKey",
+                        "title": "火山引擎 SecretAccessKey <必填>",
                         "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
                         "type": "string"
                     },
                     "apiKey": {
-                        "title": "API Key",
+                        "title": "API Key [选填]",
                         "description": "CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
                         "type": "string"
                     }
@@ -65,27 +65,27 @@
                 "type": "object",
                 "properties": {
                     "longLabel": {
-                        "title": "长版显示标签",
+                        "title": "长版显示标签 [选填]",
                         "description": "不填则使用默认标签 (OpenCodeGo)",
                         "type": "string"
                     },
                     "shortLabel": {
-                        "title": "短版显示标签",
+                        "title": "短版显示标签 [选填]",
                         "description": "不填则使用默认标签 (Go)",
                         "type": "string"
                     },
                     "authCookie": {
-                        "title": "Auth Cookie",
-                        "description": "- 登录 https://opencode.ai/auth 后从浏览器 Cookie 复制 auth 的值\n- F12 → 应用程序(Application) → Cookies → opencode.ai → auth",
+                        "title": "Auth Cookie <必填>",
+                        "description": "- 自动获取：运行 npm run login:opencode (或双击 login-opencode.cmd)\n- 手动获取：\n    - 登录 https://opencode.ai/auth 后从浏览器 Cookie 复制 auth 的值\n    - F12 -> 应用程序(Application) -> Cookies -> opencode.ai -> auth",
                         "type": "string"
                     },
                     "workspaceID": {
-                        "title": "Workspace ID",
-                        "description": "工作区 ID ，登录 https://opencode.ai/auth 后在网址栏获取，类似 wrk_...",
+                        "title": "Workspace ID <必填>",
+                        "description": "- 自动获取：运行 npm run login:opencode (或双击 login-opencode.cmd) \n- 手动获取：工作区 ID ，登录 https://opencode.ai/auth 后在网址栏获取，类似 wrk_...",
                         "type": "string"
                     },
                     "apiKey": {
-                        "title": "API Key",
+                        "title": "API Key [选填]",
                         "description": "CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
                         "type": "string"
                     }
@@ -95,6 +95,41 @@
                     "workspaceID"
                 ]
             }
+        },
+        "qwen": {
+            "title": "阿里云千问 Token Plan 账号列表",
+            "description": "",
+            "type": "array",
+            "items": {
+                "title": "千问账号",
+                "type": "object",
+                "properties": {
+                    "longLabel": {
+                        "title": "长版显示标签 [选填]",
+                        "description": "不填则使用默认标签 (千问TokenPlan)",
+                        "type": "string"
+                    },
+                    "shortLabel": {
+                        "title": "短版显示标签 [选填]",
+                        "description": "不填则使用默认标签 (千问)",
+                        "type": "string"
+                    },
+                    "cookie": {
+                        "title": "千问控制台登录 Cookie <必填>",
+                        "description": "- 自动获取：运行 npm run login:qwen (或双击 login-qwen.cmd)\n- 手动获取：\n    - 登录 https://platform.qianwenai.com 后从浏览器复制 Cookie header\n    - F12 -> Network -> 任意请求 -> Headers -> Cookie",
+                        "type": "string"
+                    },
+                    "apiKey": {
+                        "title": "API Key [选填]",
+                        "description": "CC Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "cookie"
+                ]
+            }
         }
-    }
+    },
+    "additionalProperties": false
 }

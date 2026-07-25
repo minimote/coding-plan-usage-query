@@ -58,45 +58,48 @@ export function getActualModel(raw) {
     const baseUrl =
         process.env.ANTHROPIC_BASE_URL || cfg?.env?.ANTHROPIC_BASE_URL || "";
 
-    // 路由模式：遍历 env 中配对的 MODEL_NAME/MODEL，按 display_name 匹配后拼上 [xxx] 后缀
+    // 路由模式：在 env 配对的 MODEL_NAME/MODEL 中按 display_name 匹配真实模型名
     if (/:\/\/(127\.0\.0\.1|localhost)/.test(baseUrl)) {
-        const lower = String(display).toLowerCase();
-        const env = cfg.env || {};
-
-        // 收集 ANTHROPIC_DEFAULT_<name>_MODEL_NAME，排除值为空或缺少对应 _MODEL 的条目，
-        // 按 name 长度降序，优先匹配更具体的名称
-        let name = null;
-        let model = null;
-        const tierKeys = Object.keys(env)
-            .map((key) => key.match(/^ANTHROPIC_DEFAULT_(.+)_MODEL_NAME$/))
-            .filter((m) => {
-                if (!m) return false;
-                const modelKey = `ANTHROPIC_DEFAULT_${m[1]}_MODEL`;
-                return env[m[0]]?.trim() && env[modelKey] !== undefined;
-            })
-            .sort((a, b) => b[1].length - a[1].length);
-        for (const tierMatch of tierKeys) {
-            if (lower.includes(tierMatch[1].toLowerCase())) {
-                name = env[tierMatch[0]];
-                model = env[`ANTHROPIC_DEFAULT_${tierMatch[1]}_MODEL`];
-                break;
-            }
-        }
-
-        // 未匹配到任何 tier，直接输出 display_name
-        if (!name) {
-            return String(display);
-        }
-
-        // 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后，如 glm-latest[1M]
-        const suffix = String(model).match(/\[.*\]$/);
-        if (suffix) {
-            return `${name}${suffix[0]}`;
-        }
-        return String(name);
+        // 未匹配到任何 tier 时回退 display_name
+        return matchRoutedModel(display, cfg.env || {}) ?? String(display);
     }
     // 直连模式：直接输出 display_name
     return String(display);
+}
+
+/**
+ * 路由模式下按 display_name 反推真实模型名（纯函数，可独立测试）
+ *
+ * 收集 env 中 ANTHROPIC_DEFAULT_<name>_MODEL_NAME 条目，排除值为空或缺少对应
+ * ANTHROPIC_DEFAULT_<name>_MODEL 的条目，按 name 长度降序优先匹配更具体的名称；
+ * 命中后从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后（如 glm-latest[1M]）
+ *
+ * @param {string} displayName 模型显示名（j.model.display_name）
+ * @param {object} env settings.json 的 env 对象
+ * @returns {string | null} 匹配到的真实模型名（含 [xxx] 后缀）；未匹配返回 null
+ */
+export function matchRoutedModel(displayName, env) {
+    const lower = String(displayName).toLowerCase();
+
+    const tierKeys = Object.keys(env)
+        .map((key) => key.match(/^ANTHROPIC_DEFAULT_(.+)_MODEL_NAME$/))
+        .filter((m) => {
+            if (!m) return false;
+            const modelKey = `ANTHROPIC_DEFAULT_${m[1]}_MODEL`;
+            return env[m[0]]?.trim() && env[modelKey] !== undefined;
+        })
+        .sort((a, b) => b[1].length - a[1].length);
+
+    for (const tierMatch of tierKeys) {
+        if (lower.includes(tierMatch[1].toLowerCase())) {
+            const name = env[tierMatch[0]];
+            const model = env[`ANTHROPIC_DEFAULT_${tierMatch[1]}_MODEL`];
+            // 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后，如 glm-latest[1M]
+            const suffix = String(model).match(/\[.*\]$/);
+            return suffix ? `${name}${suffix[0]}` : String(name);
+        }
+    }
+    return null;
 }
 
 // #endregion 核心逻辑 --------------------------------
