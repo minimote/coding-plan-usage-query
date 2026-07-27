@@ -5,10 +5,10 @@
  * 读取 auth cookie 和 workspaceID 写回 config.json
  *
  * 既是模块（导出 doLogin）也是 CLI：直接 `node login-opencode.mjs [--position <n>]` 即可触发登录
- * 依赖 playwright-core（devDependency），未安装时自动安装
+ * 依赖 playwright-core（devDependency），未安装时询问后安装
  */
 
-import { runLogin, isMainModule } from "./login-common.mjs";
+import { runLogin, isMainModule } from "../utils/utils-login.mjs";
 import { parseArgs } from "../utils/utils-query-usage.mjs";
 
 const LOGIN_URL = "https://opencode.ai/auth";

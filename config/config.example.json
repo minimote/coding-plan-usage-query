@@ -3,7 +3,7 @@
     "ark": [
         {
             "shortLabel": "Coding",
-            "longLabel": "火山CodingPlan",
+            "longLabel": "火山Coding",
             "apiKey": "xxx",
             "type": "coding",
             "accessKeyId": "xxx",
@@ -11,16 +11,26 @@
         },
         {
             "shortLabel": "Agent",
-            "longLabel": "火山AgentPlan",
+            "longLabel": "火山Agent",
             "apiKey": "xxx",
             "type": "agent",
             "accessKeyId": "xxx",
             "secretAccessKey": "xxx"
         }
     ],
+    "ollama": [
+        {
+            "apiKey": "xxx",
+            "shortLabel": "Ollama",
+            "longLabel": "Ollama",
+            "cookie": "xxx"
+        }
+    ],
     "opencode": [
         {
             "apiKey": "xxx",
+            "shortLabel": "Go",
+            "longLabel": "OpenCodeGo",
             "workspaceID": "wrk_xxx",
             "authCookie": "xxx"
         }

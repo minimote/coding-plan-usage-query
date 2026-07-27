@@ -10,17 +10,20 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { lookupProviderInDb } from "../src/utils/utils-cc-switch.mjs";
+import {
+    lookupProviderInDb,
+    suppressExperimentalWarning,
+} from "../src/utils/utils-cc-switch.mjs";
 
 const APP_TYPE = "claude";
 
 let tmpDir;
 let tmpDbPath;
+let DatabaseSync;
 
 /**
  * 建表并可选插入一行测试数据
@@ -45,7 +48,10 @@ function seedProvider(row) {
     db.close();
 }
 
-test.before(() => {
+test.before(async () => {
+    // 屏蔽 node:sqlite 的 ExperimentalWarning（与 utils-cc-switch.mjs 一致）
+    suppressExperimentalWarning();
+    DatabaseSync = (await import("node:sqlite")).DatabaseSync;
     tmpDir = mkdtempSync(join(tmpdir(), "cc-switch-test-"));
     tmpDbPath = join(tmpDir, "cc-switch.db");
     process.env.CC_SWITCH_DB_PATH = tmpDbPath;

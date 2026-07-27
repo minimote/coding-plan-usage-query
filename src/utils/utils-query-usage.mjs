@@ -51,6 +51,7 @@ export const TYPE = Object.freeze({
  */
 export const KEYS = Object.freeze({
     ARK: "ark",
+    OLLAMA: "ollama",
     OPENCODE: "opencode",
     QWEN: "qwen",
 });
@@ -74,15 +75,19 @@ export const ARGS = Object.freeze({
  * @enum {string}
  */
 export const COLORS = Object.freeze({
+    /** 默认颜色，重置时间 */
     RESET: "\x1b[0m",
-    GREEN: "\x1b[32m",
-    YELLOW: "\x1b[33m",
-    RED: "\x1b[31m",
-    /** Claude 橙 #DE7356，80-99% 档 */
-    ORANGE: "\x1b[38;2;222;115;86m",
     /** 亮白，窗口标签 */
     LABEL: "\x1b[97m",
-    /** 薰衣草蓝，行前缀 */
+    /** 绿 #3FB950 */
+    GREEN: "\x1b[38;2;63;185;80m",
+    /** Claude 橙色 #D97757 */
+    ORANGE: "\x1b[38;2;217;119;87m",
+    /** 黄 #E3B341 */
+    YELLOW: "\x1b[38;2;227;179;65m",
+    /** 红 #EF4444 */
+    RED: "\x1b[38;2;239;68;68m",
+    /** 薰衣草蓝紫 #B1B9F9，行前缀 */
     PREFIX: "\x1b[38;2;177;185;249m",
 });
 
@@ -114,20 +119,24 @@ export const CONFIG_PATH = join(
 export const DEFAULT_LABELS = deepFreeze({
     ark: {
         coding: {
-            long: "火山CodingPlan",
+            long: "火山Coding",
             short: "Coding",
         },
         agent: {
-            long: "火山AgentPlan",
+            long: "火山Agent",
             short: "Agent",
         },
+    },
+    ollama: {
+        long: "Ollama",
+        short: "Ollama",
     },
     opencode: {
         long: "OpenCodeGo",
         short: "Go",
     },
     qwen: {
-        long: "千问TokenPlan",
+        long: "千问",
         short: "千问",
     },
 });
@@ -330,17 +339,15 @@ export function readCache(key) {
         return null;
     }
 
-    // 倒计时扣除已流逝秒数
+    // 倒计时扣除已流逝秒数；保留原始键结构，避免为不存在的窗口（如千问无 monthly）凭空造出 null
     const elapsedSec = elapsedMs / 1000;
     const shift = (w) =>
         w == null ? null : { pct: w.pct, sec: Math.max(0, w.sec - elapsedSec) };
-    return {
-        usage: {
-            rolling: shift(entry.usage.rolling),
-            weekly: shift(entry.usage.weekly),
-            monthly: shift(entry.usage.monthly),
-        },
-    };
+    const shifted = {};
+    for (const key of Object.keys(entry.usage)) {
+        shifted[key] = shift(entry.usage[key]);
+    }
+    return { usage: shifted };
 }
 
 /**
@@ -439,7 +446,7 @@ export function bar(pct) {
  * 根据用量百分比返回 ANSI 颜色转义序列
  *
  * @param {number} pct 百分比 0-100
- * @returns {string} ANSI 颜色转义序列，0-59% 绿，60-79% 黄，80-99% Claude 橙(#DE7356)，100% 红
+ * @returns {string} ANSI 颜色转义序列，0-59% 绿，60-79% 黄，80-99% Claude 橙(#D97757)，100% 红
  */
 export function pctColorCode(pct) {
     if (pct >= 100) {
@@ -526,9 +533,13 @@ function getVisibleWidth(s) {
     for (let i = 0; i < s.length; i++) {
         const c = s.charCodeAt(i);
         if (
-            (c >= 0x4e00 && c <= 0x9fff) || // CJK Unified Ideographs
-            (c >= 0x3000 && c <= 0x303f) || // CJK Symbols & Punctuation
-            (c >= 0xff00 && c <= 0xffef) // Fullwidth Forms
+            (c >= 0x1100 && c <= 0x11ff) || // 韩文字母
+            (c >= 0x3000 && c <= 0x30ff) || // CJK 符号与标点 / 平假名 / 片假名
+            (c >= 0x3130 && c <= 0x318f) || // 韩文兼容字母
+            (c >= 0x3400 && c <= 0x4dbf) || // CJK 统一汉字扩展 A
+            (c >= 0x4e00 && c <= 0x9fff) || // CJK 统一汉字
+            (c >= 0xac00 && c <= 0xd7af) || // 韩文音节
+            (c >= 0xff00 && c <= 0xffef) // 全角形式
         ) {
             w += 2;
         } else {
@@ -645,6 +656,11 @@ export function loadConfig() {
     try {
         cfg = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
     } catch (err) {
+        if (err.code === "ENOENT") {
+            throw new Error(
+                "config.json 不存在，请将 config.example.json 复制为 config.json",
+            );
+        }
         throw new Error(`读取 config.json 失败: ${err.message}`);
     }
 

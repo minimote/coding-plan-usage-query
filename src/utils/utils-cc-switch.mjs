@@ -24,7 +24,7 @@ let DatabaseSync;
  * node:sqlite 的实验性警告在模块加载时触发，静态 import 无法拦截；
  * 动态 import 前调用本函数，可只过滤实验性警告，其他警告（如 DeprecationWarning）仍正常输出
  */
-function suppressExperimentalWarning() {
+export function suppressExperimentalWarning() {
     const orig = process.emitWarning;
     process.emitWarning = function (warning, options) {
         const type = typeof options === "string" ? options : options?.type;

@@ -21,17 +21,18 @@
 
 ## Supported Plans
 
-|                  Plan                   |  How to get data   |
-| :-------------------------------------: | :----------------: |
-| Volcengine Ark Coding Plan / Agent Plan | Volcengine OpenAPI |
-|               OpenCode Go               | HTML page parsing  |
-|      Alibaba Cloud Qwen Token Plan      |   Console Cookie   |
+|                  Plan                   |        How to get data        |
+| :-------------------------------------: | :---------------------------: |
+| Volcengine Ark Coding Plan / Agent Plan |  Volcengine OpenAPI (AK/SK)   |
+|              Ollama Cloud               |  HTML page parsing (cookie)   |
+|               OpenCode Go               |  HTML page parsing (cookie)   |
+|      Alibaba Cloud Qwen Token Plan      | Console internal API (cookie) |
 
 ## Preview
 
 ![Preview](preview.png)
 
-> Run `scripts/preview.cmd` (or `node src/tools/preview.mjs`) to preview the display at various percentage levels in the terminal using mock data — no real account needed.
+> Run `scripts/preview.cmd` (or `node src/tools/preview.mjs`) to preview the display using mock data.
 
 ## Project Structure
 
@@ -40,28 +41,34 @@ coding-plan-usage-query/
 ├── config/
 │   ├── config.example.json                # Config template
 │   └── config.schema.json                 # JSON Schema validation
+├── docs/
+│   ├── CHANGELOG.md                       # Changelog
+│   ├── README_EN.md                       # English README
+│   └── preview.png                        # Preview image
 ├── scripts/
-│   ├── query-usage-all.cmd                # Double-click to run on Windows (UTF-8 via chcp 65001)
+│   ├── login-opencode.cmd                 # Double-click to log in to OpenCode Go on Windows
 │   ├── login-qwen.cmd                     # Double-click to log in to Qwen on Windows
-│   ├── login-opencode.cmd                 # Double-click to log in to OpenCodeGo on Windows
-│   └── preview.cmd                        # Double-click to preview display on Windows
+│   ├── preview.cmd                        # Double-click to preview display on Windows
+│   └── query-usage-all.cmd                # Double-click to run on Windows (UTF-8 via chcp 65001)
 ├── src/
 │   ├── login/
-│   │   ├── login-common.mjs             # Shared login logic (Playwright, profile, config writeback)
-│   │   ├── login-qwen.mjs               # Qwen login
-│   │   └── login-opencode.mjs           # OpenCodeGo login
+│   │   ├── login-opencode.mjs             # OpenCode Go login
+│   │   └── login-qwen.mjs                 # Qwen login
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # Query all plans (parallel)
 │   │   ├── query-usage-ark.mjs            # Volcengine Ark query
+│   │   ├── query-usage-ollama.mjs         # Ollama Cloud query
+│   │   ├── query-usage-opencode-go.mjs    # OpenCode Go query
 │   │   ├── query-usage-qwen.mjs           # Qwen Token Plan query
-│   │   ├── query-usage-opencode-go.mjs    # OpenCodeGo query
-│   │   └── query-usage-smart.mjs          # Auto-match via CC-Switch (with 5s cache)
+│   │   └── query-usage-smart.mjs          # Smart query: auto-match by current plan (with 5s cache)
 │   ├── tools/
+│   │   ├── colorful-tokens.mjs            # Colorize context tokens by threshold
 │   │   ├── get-actual-model.mjs           # Get actual model name
 │   │   └── preview.mjs                    # Generate mock usage preview output
 │   └── utils/
-│       ├── utils-query-usage.mjs           # Shared utilities
-│       └── utils-cc-switch.mjs             # CC-Switch utilities
+│       ├── utils-cc-switch.mjs            # CC-Switch utilities
+│       ├── utils-login.mjs                # Shared login logic (Playwright, profile, config writeback)
+│       └── utils-query-usage.mjs          # Shared utilities
 ├── test/                                  # Unit tests (node --test)
 └── tmp/                                   # Query result cache and login profiles (auto-generated, gitignored)
 ```
@@ -82,16 +89,17 @@ Copy `config/config.example.json` to `config/config.json`.
 
 Open `config.json` and fill in credentials according to `config.schema.json`:
 
-- **Volcengine Ark**: Create an AccessKey in the Volcengine console, fill in `accessKeyId` and `secretAccessKey`
-- **OpenCodeGo**: Run `login-opencode.cmd` to log in and write the `auth` cookie and `workspaceID` (playwright-core is auto-installed on first run)
-- **Alibaba Cloud Qwen**: Run `login-qwen.cmd` to log in and write the cookie (playwright-core is auto-installed on first run)
+- **Volcengine Ark Coding Plan / Agent Plan**: Create an AccessKey in the Volcengine console, fill in `accessKeyId` and `secretAccessKey`
+- **Ollama Cloud**: Fill in `cookie` according to `config.schema.json`
+- **OpenCode Go**: Run `login-opencode.cmd` to auto-fill `authCookie` and `workspaceID`, or fill in manually according to `config.schema.json`
+- **Alibaba Cloud Qwen Token Plan**: Run `login-qwen.cmd` to auto-fill the `cookie`, or fill in manually according to `config.schema.json`
 
 See [Configuration](#configuration) below for details.
 
 ### 3. Run queries
 
 ```bash
-# Auto-match based on CC-Switch current provider
+# Smart query: auto-match by current plan (with 5s cache)
 node src/query/query-usage-smart.mjs
 
 # Query all plans
@@ -103,24 +111,29 @@ node src/query/query-usage-ark.mjs
 # Volcengine Ark Agent Plan (override)
 node src/query/query-usage-ark.mjs --type agent
 
-# OpenCodeGo
+# Ollama Cloud
+node src/query/query-usage-ollama.mjs
+
+# OpenCode Go
 node src/query/query-usage-opencode-go.mjs
 
-# Alibaba Cloud Qwen (prompts to run login command if cookie expired)
+# Alibaba Cloud Qwen
 node src/query/query-usage-qwen.mjs
 
-# Log in to Qwen to refresh cookie (double-click login-qwen.cmd on Windows, or command line)
-npm run login:qwen
+# Log in to Qwen via browser, auto-read credentials
+node src/login/login-qwen.mjs
 
-# Log in to OpenCodeGo to refresh credentials (double-click login-opencode.cmd on Windows, or command line)
-npm run login:opencode
+# Log in to OpenCode Go via browser, auto-read credentials
+node src/login/login-opencode.mjs
 
 # Specify account position (0-indexed)
 node src/query/query-usage-ark.mjs --position 1
 
-# Preview display (no real account needed)
+# Preview display
 node src/tools/preview.mjs
 ```
+
+> The above commands can also be run via npm scripts: `npm run query` (smart), `npm run query:all`, `npm run query:ark`/`query:ollama`/`query:opencode`/`query:qwen` (per-plan), `npm run login:qwen`/`login:opencode` (login). To pass arguments, add `--`, e.g. `npm run query:ark -- --type agent`.
 
 ## Command Line Arguments
 
@@ -131,32 +144,32 @@ Query scripts support the following arguments:
 |          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                                                         |
 |           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (`c`) / `agent` (`a`); falls back to the account's `type`, then `coding` (ignored by all/smart scripts) |
 |         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                    |
-| `--hide-on-monthly-exhausted` |   -   | Skip output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script)                                    |
+| `--hide-on-monthly-exhausted` |   -   | Skip this query's output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script)                       |
 
-> Login scripts (`login-qwen`/`login-opencode`) only support the `--position`/`-p` argument.
+> Login scripts (`login-qwen`/`login-opencode`) only support the `--position`/`-p` argument. `position` ranges 0~N (N = current account count): `< N` updates an existing account, `= N` creates a new one; out-of-range prompts re-entry, and opening the browser asks for confirmation.
 
 ## Configuration
 
-`config/config.json` is a JSON object with three keys: `ark` (Volcengine Ark accounts), `opencode` (OpenCodeGo accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
+`config/config.json` is a JSON object with four keys: `ark` (Volcengine Ark accounts), `ollama` (Ollama Cloud accounts), `opencode` (OpenCode Go accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
 
-### Volcengine Ark
+### Volcengine Ark Coding Plan / Agent Plan
 
 ```json
 {
     "ark": [
         {
+            "shortLabel": "Coding",
+            "longLabel": "火山Coding",
             "apiKey": "xxx",
             "type": "coding",
-            "longLabel": "火山CodingPlan",
-            "shortLabel": "Coding",
             "accessKeyId": "xxx",
             "secretAccessKey": "xxx"
         },
         {
+            "shortLabel": "Agent",
+            "longLabel": "火山Agent",
             "apiKey": "xxx",
             "type": "agent",
-            "longLabel": "火山AgentPlan",
-            "shortLabel": "Agent",
             "accessKeyId": "xxx",
             "secretAccessKey": "xxx"
         }
@@ -164,50 +177,72 @@ Query scripts support the following arguments:
 }
 ```
 
-|           Field            | Required | Description                                                                     |
-| :------------------------: | :------: | ------------------------------------------------------------------------------- |
-|           `type`           |    No    | Plan type: `coding` (default) or `agent`                                        |
-| `longLabel` / `shortLabel` |    No    | Display label, defaults to `火山CodingPlan`/`Coding` or `火山AgentPlan`/`Agent` |
-|       `accessKeyId`        |   Yes    | Volcengine AccessKey ID                                                         |
-|     `secretAccessKey`      |   Yes    | Volcengine SecretAccessKey                                                      |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                                  |
+|           Field            | Required | Description                                                             |
+| :------------------------: | :------: | ----------------------------------------------------------------------- |
+|           `type`           |    No    | Plan type: `coding` (default) or `agent`                                |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `火山Coding`/`Coding` or `火山Agent`/`Agent` |
+|       `accessKeyId`        |   Yes    | Volcengine AccessKey ID                                                 |
+|     `secretAccessKey`      |   Yes    | Volcengine SecretAccessKey                                              |
+|          `apiKey`          |    No    | CC-Switch API Key for matching current account                          |
 
-> Create an AccessKey at <https://console.volcengine.com/iam/keymanage>
-> Sub-accounts need `AccessKeySelfManageAccess` and `ArkReadOnlyAccess` permissions
+Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accounts need `AccessKeySelfManageAccess` and `ArkReadOnlyAccess` permissions).
 
-### OpenCodeGo
+### Ollama Cloud
+
+```json
+{
+    "ollama": [
+        {
+            "apiKey": "xxx",
+            "shortLabel": "Ollama",
+            "longLabel": "Ollama",
+            "cookie": "xxx"
+        }
+    ]
+}
+```
+
+|           Field            | Required | Description                                                          |
+| :------------------------: | :------: | :------------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `Ollama`/`Ollama`                         |
+|          `cookie`          |   Yes    | Value of the `__Secure-session` cookie, copied from browser DevTools |
+|          `apiKey`          |    No    | CC-Switch API Key for matching current account                       |
+
+> Ollama login is protected by Cloudflare bot detection. Playwright-launched browsers are flagged as automated and cannot pass verification, so no login script is provided. After logging in at <https://ollama.com>, copy the value of `__Secure-session` from browser DevTools -> Application -> Cookies into the config.
+
+### OpenCode Go
 
 ```json
 {
     "opencode": [
         {
-            "authCookie": "xxx",
+            "apiKey": "xxx",
+            "shortLabel": "Go",
+            "longLabel": "OpenCodeGo",
             "workspaceID": "wrk_xxx",
-            "apiKey": "xxx"
+            "authCookie": "xxx"
         }
     ]
 }
 ```
 
-|           Field            | Required | Description                                                         |
-| :------------------------: | :------: | ------------------------------------------------------------------- |
-| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCodeGo`/`Go`                        |
-|        `authCookie`        |   Yes    | `auth` cookie from opencode.ai, auto-filled by `login-opencode.cmd` |
-|       `workspaceID`        |   Yes    | Workspace ID, e.g. `wrk_...`, auto-filled by `login-opencode.cmd`   |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                      |
+|           Field            | Required | Description                                                       |
+| :------------------------: | :------: | ----------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCodeGo`/`Go`                      |
+|        `authCookie`        |   Yes    | auth cookie from opencode.ai, auto-filled by `login-opencode.cmd` |
+|       `workspaceID`        |   Yes    | Workspace ID, e.g. `wrk_...`, auto-filled by `login-opencode.cmd` |
+|          `apiKey`          |    No    | CC-Switch API Key for matching current account                    |
 
-> Run `npm run login:opencode` (or double-click `login-opencode.cmd`) to auto-fill after login
-
-### Alibaba Cloud Qwen
+### Alibaba Cloud Qwen Token Plan
 
 ```json
 {
     "qwen": [
         {
-            "apiKey": "sk-sp-xxx",
-            "cookie": "cna=xxx; login_qianwenai_ticket=xxx; ...",
+            "shortLabel": "千问",
             "longLabel": "千问",
-            "shortLabel": "千问"
+            "apiKey": "sk-sp-xxx",
+            "cookie": "xxx"
         }
     ]
 }
@@ -215,13 +250,9 @@ Query scripts support the following arguments:
 
 |           Field            | Required | Description                                                        |
 | :------------------------: | :------: | ------------------------------------------------------------------ |
-| `longLabel` / `shortLabel` |    No    | Display label, defaults to `千问TokenPlan`/`千问`                  |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `千问`/`千问`                           |
 |          `cookie`          |   Yes    | Qwen console login cookie, auto-filled by running `login-qwen.cmd` |
 |          `apiKey`          |    No    | CC-Switch API Key for matching current account                     |
-
-> Qwen has no public usage-query OpenAPI; the console cookie is used to call an internal data gateway
-> The cookie expires; run `login-qwen.cmd` again to re-login when it expires
-> Login depends on `playwright-core` (devDependency), auto-installed on first run of `login-qwen.cmd`
 
 ## Auto-Match Account
 
@@ -232,9 +263,12 @@ Query scripts support the following arguments:
 3. Match the account with the same `apiKey` in `config.json`
 4. Call the corresponding query function in-process
 
-> When a free model is detected, all accounts are displayed instead
-> If no matching account is found, the script exits silently (no output)
-> Query results are cached for 5 seconds (`tmp/cache-usage.json`) to reduce upstream API calls under frequent refreshes; running the sub-scripts manually always queries live
+Notes:
+
+- When a free model is detected, all accounts are displayed instead
+- If no matching account is found, the script exits silently (no output)
+- Query results are cached for 5 seconds (`tmp/cache-usage.json`) to reduce API calls under frequent refreshes
+- Running the sub-scripts manually does not use the cache
 
 ## Usage with ccstatusline / ccstatusline-zh
 

@@ -60,6 +60,23 @@ test("writeCache -> readCache: 写入后立即可读", () => {
     assert.ok(Math.abs(hit.usage.monthly.sec - 2000000) < 1);
 });
 
+test("readCache: 保留原始键结构，不为缺失的窗口造 null（千问无 monthly）", () => {
+    clearCache();
+    // 千问 usage 只有 rolling/weekly，无 monthly 键
+    writeCache("qwen:0", {
+        usage: {
+            rolling: { pct: 50, sec: 1800 },
+            weekly: { pct: 30, sec: 500000 },
+        },
+    });
+    const hit = readCache("qwen:0");
+    assert.ok(hit);
+    assert.equal(hit.usage.rolling.pct, 50);
+    assert.equal(hit.usage.weekly.pct, 30);
+    // 关键：不应凭空造出 monthly 键（修复前 readCache 硬编码三窗口会造出 null）
+    assert.equal("monthly" in hit.usage, false);
+});
+
 test("readCache: 倒计时扣除已流逝秒数", () => {
     clearCache();
     writeCache("ark:0:coding", {

@@ -14,6 +14,7 @@ import { readCache } from "../src/utils/utils-query-usage.mjs";
 import { queryUsage as queryArk } from "../src/query/query-usage-ark.mjs";
 import { queryUsage as queryOpencode } from "../src/query/query-usage-opencode-go.mjs";
 import { queryUsage as queryQwen } from "../src/query/query-usage-qwen.mjs";
+import { queryUsage as queryOllama } from "../src/query/query-usage-ollama.mjs";
 
 /** 必然越界的 position：无论真实 config 有多少账号都触发 findAccount 阶段错误 */
 const OOB = 999999;
@@ -34,4 +35,10 @@ test("qwen: config 阶段错误（position 越界）返回错误行且不写负�
     const out = await queryQwen({ position: OOB, cache: true });
     assert.ok(out.includes("❌"), "应返回错误行");
     assert.equal(readCache(`qwen:${OOB}`), null, "不应写负缓存");
+});
+
+test("ollama: config 阶段错误（position 越界）返回错误行且不写负缓存", async () => {
+    const out = await queryOllama({ position: OOB, cache: true });
+    assert.ok(out.includes("❌"), "应返回错误行");
+    assert.equal(readCache(`ollama:${OOB}`), null, "不应写负缓存");
 });
