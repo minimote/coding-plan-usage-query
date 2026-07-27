@@ -1,5 +1,5 @@
 /**
- * @file OpenCodeGo 用量查询
+ * @file OpenCode Go 用量查询
  *
  * 读取 config.json 的 opencode 数组获取凭据
  * 请求 https://opencode.ai/workspace/<WorkspaceID>/go 页面，解析用量信息
@@ -139,7 +139,6 @@ export function parseUsageWindows(html) {
  */
 async function fetchUsage(authCookie, workspaceID) {
     const cookie = "auth=" + authCookie;
-    const timeoutMs = 3000;
     const baseUrl = "https://opencode.ai";
     const userAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
@@ -150,7 +149,7 @@ async function fetchUsage(authCookie, workspaceID) {
             "User-Agent": userAgent,
             Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(3000),
     });
 
     if (resp.status === 401 || resp.status === 403) {
@@ -191,7 +190,7 @@ async function fetchUsage(authCookie, workspaceID) {
 // #region 查询入口 ----------------
 
 /**
- * 查询 OpenCodeGo 用量并返回渲染后的输出行
+ * 查询 OpenCode Go 用量并返回渲染后的输出行
  *
  * 不抛出异常：出错时返回带默认标签前缀的错误字符串，便于调用方保持退出码 0
  *

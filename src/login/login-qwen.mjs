@@ -5,10 +5,10 @@
  * 读取登录 cookie 写回 config.json
  *
  * 既是模块（导出 doLogin）也是 CLI：直接 `node login-qwen.mjs [--position <n>]` 即可触发登录
- * 依赖 playwright-core（devDependency），未安装时自动安装
+ * 依赖 playwright-core（devDependency），未安装时询问后安装
  */
 
-import { runLogin, isMainModule } from "./login-common.mjs";
+import { runLogin, isMainModule } from "../utils/utils-login.mjs";
 import { parseArgs } from "../utils/utils-query-usage.mjs";
 
 const LOGIN_URL =
@@ -36,7 +36,7 @@ export async function doLogin(position = 0) {
         onLogin: async (ctx, page) => {
             // 登录后导航到用量页，确保 cookie 完整
             await page.goto(LOGIN_URL).catch(() => {});
-            await page.waitForLoadState("networkidle").catch(() => {});
+            await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
             const cookies = await ctx.cookies(COOKIE_URL);
             const cookieStr = cookies
                 .map((c) => `${c.name}=${c.value}`)
@@ -47,7 +47,7 @@ export async function doLogin(position = 0) {
             return { configUpdate: { cookie: cookieStr } };
         },
     });
-    return result.cookie;
+    return result?.cookie;
 }
 
 if (isMainModule(import.meta.url)) {

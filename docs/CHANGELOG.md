@@ -1,5 +1,35 @@
 # 更新日志
 
+## v2.4.0-2026.07.27
+
+### 新增
+
+- Ollama Cloud 用量查询：新增 `src/query/query-usage-ollama.mjs`，请求 `ollama.com/settings` 解析 SSR HTML，提取 session（映射 rolling）/ weekly 两个窗口用量；重置时间优先取 `local-time` 元素的 `data-time` 精确时间戳，回退到 "Resets in X hours" 文本时长解析；cookie 失效（3xx 重定向或页面出现登录关键词）时明确提示从浏览器重新获取 `__Secure-session`。Ollama 登录受 Cloudflare 人机验证保护，Playwright 启动的浏览器会被判定为自动化而无法通过，故未提供登录脚本，cookie 需从真实浏览器手动复制
+- 上下文 token 着色工具：新增 `src/tools/colorful-tokens.mjs`，作为 ccstatusline / ccstatusline-zh 的自定义命令，从 stdin JSON 读取 `context_window` 的 input+output token 总数按阈值（256k / 384k / 512k）着色输出，颜色复用 `COLORS` 与用量查询配色统一
+- 登录公共逻辑重构与交互改进：`src/login/login-common.mjs` 迁移至 `src/utils/utils-login.mjs`；`playwright-core` 未安装时由自动安装改为询问后安装；`position` 越界时交互式重新输入（留空取消）；开浏览器前要求确认（防 position 手误）；浏览器被关闭时询问是否重开；登录期间 config 被改导致 position 丢失时询问是否追加到末尾，取消则把凭据打到 stderr 不丢失
+- 配置文件：`config.example.json` / `config.schema.json` 新增 `ollama` 账号数组（`cookie` / `apiKey` / `longLabel` / `shortLabel`）
+- `package.json`：新增 `ctx:tokens`（colorful-tokens）与 `query:ollama` scripts
+- 单元测试：新增 `test/query-usage-ollama.test.mjs`（HTML 解析、英文时长解析、data-time 优先级与回退、过期钳制为 0）和 `test/colorful-tokens.test.mjs`（四档阈值与边界、k 单位格式化、JSON 解析容错）
+
+### 变更
+
+- 配色升级为 24 位真彩色：`COLORS` 的 GREEN / YELLOW / ORANGE / RED 由标准 ANSI 改为真彩色（#3FB950 / #E3B341 / #D97757 / #EF4444），ORANGE 由 #DE7356 调整为 #D97757
+- 默认标签精简：`火山CodingPlan` -> `火山Coding`、`火山AgentPlan` -> `火山Agent`、`千问TokenPlan` -> `千问`
+- `query-usage-all.mjs` 接入 Ollama，`QUERY_FNS` 输出顺序为 opencode -> ark -> ollama -> qwen
+- `getVisibleWidth` 扩充宽字符判断范围：新增韩文字母 / 音节 / 兼容字母、平假名 / 片假名、CJK 统一汉字扩展 A
+- `loadConfig` 区分 `ENOENT`（config.json 不存在）给出「请将 config.example.json 复制为 config.json」明确提示
+- `suppressExperimentalWarning`（`utils-cc-switch.mjs`）导出供测试调用
+- `login-qwen.mjs`：`waitForLoadState("networkidle")` 加 10s 超时避免无限等待
+- `query-usage-opencode-go.mjs`：文件头与函数注释中 `OpenCodeGo` 统一为 `OpenCode Go`
+- `preview.mjs` 假数据调整：按阅读顺序循环绿 / 黄 / 橙 / 红四档颜色，新增 Ollama 样本
+- `playwright-core` 升级 ^1.61.1 -> ^1.62.0
+- README / README_EN 大幅更新：新增 Ollama Cloud 章节与获取方式对照表、npm scripts 快捷运行说明、登录 `position` 取值与交互说明、配置字段表格重排、「CC Switch」统一为「CC-Switch」
+
+### 修复
+
+- `readCache` 不再为不存在的窗口凭空造出 null：改为按 `entry.usage` 实际键遍历，修复前硬编码 rolling / weekly / monthly 三窗口导致千问、Ollama 等无 monthly 的平台读缓存时多出一个 null 窗口
+- `login-qwen.mjs` 用户取消登录（`runLogin` 返回 null）后访问 `result.cookie` 空指针：改为 `result?.cookie`
+
 ## v2.3.0-2026.07.25
 
 ### 新增

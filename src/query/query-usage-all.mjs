@@ -23,6 +23,7 @@ import {
 } from "../utils/utils-query-usage.mjs";
 import { queryUsage as queryOpencode } from "./query-usage-opencode-go.mjs";
 import { queryUsage as queryArk } from "./query-usage-ark.mjs";
+import { queryUsage as queryOllama } from "./query-usage-ollama.mjs";
 import { queryUsage as queryQwen } from "./query-usage-qwen.mjs";
 
 // #region 查询入口 ----------------
@@ -35,6 +36,7 @@ import { queryUsage as queryQwen } from "./query-usage-qwen.mjs";
 export const QUERY_FNS = Object.freeze({
     [KEYS.OPENCODE]: queryOpencode,
     [KEYS.ARK]: queryArk,
+    [KEYS.OLLAMA]: queryOllama,
     [KEYS.QWEN]: queryQwen,
 });
 

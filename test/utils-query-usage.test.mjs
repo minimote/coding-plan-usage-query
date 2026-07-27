@@ -172,17 +172,17 @@ test("renderWindows: AUTO 档窄终端回退 SHORT", () => {
 
 test("renderErrorLine: 格式为 前缀 | ❌ 消息", () => {
     const out = renderErrorLine(
-        { long: "火山CodingPlan", short: "Coding" },
+        { long: "火山Coding", short: "Coding" },
         DISPLAY.LONG,
         "测试错误",
     );
-    assert.ok(out.includes(COLORS.PREFIX + "火山CodingPlan"));
+    assert.ok(out.includes(COLORS.PREFIX + "火山Coding"));
     assert.ok(out.includes("❌ 测试错误"));
 });
 
 test("renderErrorLine: short 档用 short 标签", () => {
     const out = renderErrorLine(
-        { long: "火山CodingPlan", short: "Coding" },
+        { long: "火山Coding", short: "Coding" },
         DISPLAY.SHORT,
         "err",
     );
