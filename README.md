@@ -60,7 +60,7 @@ coding-plan-usage-query/
 │   │   ├── query-usage-ollama.mjs         # Ollama Cloud 用量查询
 │   │   ├── query-usage-opencode-go.mjs    # OpenCode Go 用量查询
 │   │   ├── query-usage-qwen.mjs           # 千问 Token Plan 用量查询
-│   │   └── query-usage-smart.mjs          # 智能查询：根据实际使用的套餐自动匹配（带 5 秒缓存）
+│   │   └── query-usage-smart.mjs          # 智能查询：根据实际使用的套餐自动匹配（带缓存）
 │   ├── tools/
 │   │   ├── colorful-tokens.mjs            # 上下文 token 数按阈值着色
 │   │   ├── get-actual-model.mjs           # 获取真实模型名称
@@ -99,7 +99,7 @@ coding-plan-usage-query/
 ### 3. 运行查询
 
 ```bash
-# 智能查询：根据实际使用的套餐自动匹配（带 5 秒缓存）
+# 智能查询：根据实际使用的套餐自动匹配（带缓存）
 node src/query/query-usage-smart.mjs
 
 # 查询所有套餐
@@ -144,7 +144,8 @@ node src/tools/preview.mjs
 |          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）                                                       |
 |           `--type`            | `-t` | 火山方舟套餐类型：`coding`（`c`）/ `agent`（`a`），未传时用账号 `type` 配置，再回退 `coding`（all/smart 脚本忽略） |
 |         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                                                                      |
-| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时不输出该条查询（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                   |
+| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时隐藏该条查询（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                     |
+|  `--hide-on-no-active-plan`   |  -   | 无活跃套餐时隐藏该条查询（`true`/`false`，默认 `false`，仅 `all` 脚本生效）                                        |
 
 > 登录脚本（`login-qwen`/`login-opencode`）仅支持 `--position`/`-p` 参数。`position` 取 0~N（N 为当前账号数）：`< N` 更新已有账号，`= N` 新建第 N+1 个账号；越界时会提示重新输入，开浏览器前会要求确认。
 
@@ -265,9 +266,8 @@ node src/tools/preview.mjs
 
 说明：
 
-- 检测到免费模型时，改为显示全部账号用量
-- 匹配不到账号时静默退出（不输出任何内容）
-- 查询结果缓存 5 秒（`tmp/cache-usage.json`），减少高频刷新时的 API 请求
+- 检测到使用免费模型或匹配不到账号时，显示全部账号用量
+- 查询结果缓存 5 秒，错误结果缓存 30 秒（`tmp/cache-usage.json`），减少高频刷新时的 API 请求
 - 手动运行子脚本时不使用缓存
 
 ## 搭配 ccstatusline / ccstatusline-zh 使用
@@ -278,7 +278,7 @@ node src/tools/preview.mjs
 node F:/xxx/query-usage-smart.mjs
 ```
 
-- 自定义命令超时建议设为 6000ms
+- 建议将自定义命令超时设为大于脚本内部超时（10 秒），否则状态栏会出现显示错误
 - 如需显示彩色百分比，请在 ccstatusline / ccstatusline-zh 中将自定义命令设置为保留颜色
 
 ## 更新日志

@@ -21,6 +21,7 @@
 import {
     DISPLAY,
     KEYS,
+    NO_ACTIVE_PLAN,
     DEFAULT_LABELS,
     renderWindows,
     renderErrorLine,
@@ -31,6 +32,7 @@ import {
     fetchUsageCached,
     writeCache,
     isMainModule,
+    REQUEST_TIMEOUT_MS,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -136,6 +138,22 @@ export function parseUsageWindows(html, now = Date.now()) {
     };
 }
 
+/**
+ * 从 settings 页面提取套餐类型标签
+ *
+ * "Cloud usage" 标题右侧有一个带 capitalize class 的 span 显示套餐类型
+ * （已订阅为 "pro"，未订阅为 "free"）；抓不到返回 null
+ *
+ * @param {string} html settings 页面 HTML
+ * @returns {string | null} 小写套餐类型，如 "pro" / "free"；抓不到为 null
+ */
+export function parsePlanType(html) {
+    const m = html.match(
+        /Cloud usage<\/span>[\s\S]{0,400}?<span[^>]*\bcapitalize\b[^>]*>\s*([^<]+?)\s*<\/span/,
+    );
+    return m ? m[1].trim().toLowerCase() : null;
+}
+
 // #endregion 解析工具 --------------------------------
 
 // #region 用量请求 ----------------
@@ -158,7 +176,7 @@ async function fetchUsage(sessionCookie) {
             "User-Agent": UA,
         },
         redirect: "manual",
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     // cookie 失效：ollama.com 会 3xx 重定向到登录页
@@ -181,11 +199,16 @@ async function fetchUsage(sessionCookie) {
     }
 
     const usage = parseUsageWindows(html);
+    const planType = parsePlanType(html);
+    // 套餐类型为 free（未订阅/已过期降级）时视为无活跃套餐
+    if (planType === "free") {
+        throw new Error(`${NO_ACTIVE_PLAN}，当前为${planType}套餐`);
+    }
     if (usage.rolling === null && usage.weekly === null) {
         if (/Session usage|Weekly usage/i.test(html)) {
             throw new Error("页面解析失败，页面结构可能已更新");
         }
-        throw new Error("未找到用量数据，请检查 cookie 是否正确");
+        throw new Error("未找到用量数据");
     }
     return usage;
 }
@@ -203,6 +226,7 @@ async function fetchUsage(sessionCookie) {
  * @param {number} [options.position=0] 账号位置（0 开始）
  * @param {"auto" | "long" | "short"} [options.display=DISPLAY.AUTO] 展示档位
  * @param {boolean} [options.cache=false] 启用结果缓存（含错误负缓存）
+ * @param {object} [options._config] 内部：已解析的 config 对象，避免重复读取
  * @returns {Promise<string>} 输出行
  */
 export async function queryUsage(options = {}) {
@@ -212,7 +236,7 @@ export async function queryUsage(options = {}) {
     // 是否已进入网络查询阶段：仅对此后的失败写负缓存（配置类错误不写，原因同 ark）
     let reachedFetch = false;
     try {
-        const cfg = loadConfig();
+        const cfg = options._config || loadConfig();
         const account = findAccount(cfg[KEY], position);
         prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
         const cookie = (account.cookie || "").trim();

@@ -20,6 +20,7 @@ import {
     DISPLAY,
     TYPE,
     KEYS,
+    NO_ACTIVE_PLAN,
     renderWindows,
     renderErrorLine,
     loadConfig,
@@ -30,6 +31,7 @@ import {
     fetchUsageCached,
     writeCache,
     isMainModule,
+    REQUEST_TIMEOUT_MS,
 } from "../utils/utils-query-usage.mjs";
 import { createHmac, createHash } from "crypto";
 
@@ -186,7 +188,7 @@ async function callOpenApi(action, ak, sk) {
             Authorization: authorization,
         },
         body,
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!resp.ok) {
@@ -314,7 +316,7 @@ async function fetchUsage(ak, sk, type) {
             : parseAfpResponse(data).tiers;
 
     if (!tiers || tiers.length === 0) {
-        throw new Error("无活跃套餐");
+        throw new Error(NO_ACTIVE_PLAN);
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -358,6 +360,7 @@ async function fetchUsage(ak, sk, type) {
  * @param {"coding" | "agent"} [options.type] 套餐类型；缺省时用账号 type，再缺省用 coding
  * @param {boolean} [options.hideOnMonthlyExhausted=false] 月度耗尽时隐藏
  * @param {boolean} [options.cache=false] 启用结果缓存（含错误负缓存）
+ * @param {object} [options._config] 内部：已解析的 config 对象，避免重复读取
  * @returns {Promise<string>} 输出行；隐藏时为空字符串
  */
 export async function queryUsage(options = {}) {
@@ -369,14 +372,17 @@ export async function queryUsage(options = {}) {
         cache = false,
     } = options;
 
-    // 出错时 catch 用于选错误前缀的套餐类型，随解析推进逐步细化
+    // effType 仅用于负缓存键（按套餐类型区分缓存），不参与错误标签选择
     let effType = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
+    // 错误标签前缀：解析到账号+type 后立即用 resolvePrefixes 覆盖默认标签；
+    // 仅 loadConfig/findAccount 这类早期错误在覆盖前抛出，回退到默认标签
+    let prefixes = DEFAULT_LABELS[KEY][effType];
     // 是否已进入网络查询阶段：仅对此后的失败写负缓存。
     // 配置类错误（loadConfig/findAccount/缺凭据）发生在读缓存点之前，
     // 写负缓存既不会被命中，还可能在配置于 TTL 内修复后残留旧错误
     let reachedFetch = false;
     try {
-        const cfg = loadConfig();
+        const cfg = options._config || loadConfig();
         const account = findAccount(cfg[KEY], position);
 
         // 套餐类型优先级：调用方 type > 账号 type > 默认 coding
@@ -386,13 +392,13 @@ export async function queryUsage(options = {}) {
               ? account.type
               : TYPE.CODING;
         effType = type;
+        // 先解析前缀再校验凭据：缺凭据错误也能用对的类型/账号标签渲染
+        prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
         const ak = (account.accessKeyId || "").trim();
         const sk = (account.secretAccessKey || "").trim();
         if (!ak || !sk) {
             throw new Error("配置缺少 accessKeyId 或 secretAccessKey");
         }
-
-        const prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
 
         reachedFetch = true;
         const result = await fetchUsageCached(
@@ -410,11 +416,7 @@ export async function queryUsage(options = {}) {
             hideOnMonthlyExhausted,
         );
     } catch (err) {
-        const output = renderErrorLine(
-            DEFAULT_LABELS[KEY][effType],
-            display,
-            err.message,
-        );
+        const output = renderErrorLine(prefixes, display, err.message);
         if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}:${effType}`, { output });
         }
@@ -442,7 +444,8 @@ async function main() {
     } catch (err) {
         // queryUsage 不抛错，此处只兜底 parseArgs 失败
         process.stdout.write(
-            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message) + "\n",
+            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message) +
+                "\n",
         );
     }
 }

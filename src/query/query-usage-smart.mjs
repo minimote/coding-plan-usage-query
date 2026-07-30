@@ -2,7 +2,7 @@
  * @file 根据 CC-Switch 当前供应商智能路由到对应用量查询函数
  *
  * 从 CC-Switch 读取当前供应商的 API Key，在 config 中匹配账号位置，调用对应查询函数
- * 检测到免费模型时显示全部账号用量
+ * 检测到免费模型或匹配不到账号时显示全部账号用量
  * 查询结果带短时缓存，减少高频刷新下的重复请求
  *
  * 用法:
@@ -17,6 +17,7 @@ import {
     loadConfig,
     parseArgs,
     isMainModule,
+    ERROR_MARK,
 } from "../utils/utils-query-usage.mjs";
 import { getAPIKey } from "../utils/utils-cc-switch.mjs";
 import { getActualModel } from "../tools/get-actual-model.mjs";
@@ -51,18 +52,32 @@ function isFreeModel() {
 
 // #region 脚本入口 ----------------
 
+/**
+ * 查询并输出全部账号用量（兜底场景共用参数）
+ *
+ * 免费模型与匹配不到账号两种兜底场景共用：强制隐藏月度用完与无活跃套餐的账号，
+ * 保证两处显示效果一致
+ *
+ * @param {"auto" | "long" | "short"} display 展示档位
+ * @returns {Promise<void>}
+ */
+async function queryAllFallback(display) {
+    process.stdout.write(
+        await queryAll({
+            display,
+            hideOnMonthlyExhausted: true,
+            hideOnNoActivePlan: true,
+            cache: true,
+        }),
+    );
+}
+
 async function main() {
     const { display } = parseArgs(process.argv);
 
-    // 使用免费模型时查询全部账号，强制隐藏月度用完的账号
+    // 使用免费模型时查询全部账号
     if (isFreeModel()) {
-        process.stdout.write(
-            await queryAll({
-                display,
-                hideOnMonthlyExhausted: true,
-                cache: true,
-            }),
-        );
+        await queryAllFallback(display);
         return;
     }
 
@@ -82,9 +97,10 @@ async function main() {
         }
     }
 
-    // 匹配不到账号时静默退出
+    // 匹配不到账号时也查询全部账号
     if (!matched) {
-        process.exit(0);
+        await queryAllFallback(display);
+        return;
     }
 
     // hide 走默认 false，保留用完账号的显示；type 由查询函数回退到账号配置
@@ -99,7 +115,7 @@ async function main() {
 
 if (isMainModule(import.meta.url)) {
     main().catch((err) => {
-        process.stdout.write(`❌ ${err.message}\n`);
+        process.stdout.write(`${ERROR_MARK}${err.message}\n`);
     });
 }
 

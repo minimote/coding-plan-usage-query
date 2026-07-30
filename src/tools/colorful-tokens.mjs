@@ -11,22 +11,22 @@ import { COLORS, isMainModule } from "../utils/utils-query-usage.mjs";
 /**
  * 按 token 总数返回对应档位的 ANSI 颜色
  *
- * 阈值：[512k,+∞) 红，[384k,512k) 橙，[256k,384k) 黄，[0,256k) 绿
+ * 阈值：[0,128k)绿，[128k,256k)黄，[256k,512k) 橙，[512k,+∞) 红
  *
  * @param {number} total 上下文 input + output token 总数
  * @returns {string} ANSI 颜色转义序列
  */
 export function colorForTokens(total) {
-    if (total >= 512_000) {
-        return COLORS.RED;
+    if (total < 128_000) {
+        return COLORS.GREEN;
     }
-    if (total >= 384_000) {
-        return COLORS.ORANGE;
-    }
-    if (total >= 256_000) {
+    if (total < 256_000) {
         return COLORS.YELLOW;
     }
-    return COLORS.GREEN;
+    if (total < 512_000) {
+        return COLORS.ORANGE;
+    }
+    return COLORS.RED;
 }
 
 /**
@@ -54,12 +54,12 @@ export function renderFromRaw(raw) {
 
         // 从 JSON 取总 token 数（输入 + 输出）
         const total =
-            (cw?.total_input_tokens || 0) + (cw?.total_output_tokens || 0);
+            (+cw?.total_input_tokens || 0) + (+cw?.total_output_tokens || 0);
 
         return `${colorForTokens(total)}${formatTokens(total)}${COLORS.RESET}`;
     } catch {
         // 出现异常输出问号(亮白色)
-        return `${COLORS.LABEL}?${COLORS.RESET}`;
+        return `${COLORS.WHITE}?${COLORS.RESET}`;
     }
 }
 
@@ -70,7 +70,7 @@ function main() {
     // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
     if (process.stdin.isTTY) {
         process.stdout.write(
-            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
+            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用\n",
         );
         return;
     }

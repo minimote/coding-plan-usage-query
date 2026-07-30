@@ -16,7 +16,7 @@ import {
 // 百分比用 1/2/8/9 结尾，五小时不超过周用量的 2 倍，周不超过月用量的 2 倍
 const samples = [
     {
-        prefixes: DEFAULT_LABELS[KEYS.ARK].coding,
+        prefixes: DEFAULT_LABELS[KEYS.ARK].agent,
         usage: {
             [WINDOW.ROLLING]: { pct: 11, sec: 16000 },
             [WINDOW.WEEKLY]: { pct: 62, sec: 230000 },
@@ -24,7 +24,7 @@ const samples = [
         },
     },
     {
-        prefixes: DEFAULT_LABELS[KEYS.ARK].agent,
+        prefixes: DEFAULT_LABELS[KEYS.ARK].coding,
         usage: {
             [WINDOW.ROLLING]: { pct: 100, sec: 300 },
             [WINDOW.WEEKLY]: { pct: 51, sec: 300000 },

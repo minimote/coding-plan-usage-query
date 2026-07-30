@@ -60,7 +60,7 @@ coding-plan-usage-query/
 │   │   ├── query-usage-ollama.mjs         # Ollama Cloud query
 │   │   ├── query-usage-opencode-go.mjs    # OpenCode Go query
 │   │   ├── query-usage-qwen.mjs           # Qwen Token Plan query
-│   │   └── query-usage-smart.mjs          # Smart query: auto-match by current plan (with 5s cache)
+│   │   └── query-usage-smart.mjs          # Smart query: auto-match by current plan (with cache)
 │   ├── tools/
 │   │   ├── colorful-tokens.mjs            # Colorize context tokens by threshold
 │   │   ├── get-actual-model.mjs           # Get actual model name
@@ -99,7 +99,7 @@ See [Configuration](#configuration) below for details.
 ### 3. Run queries
 
 ```bash
-# Smart query: auto-match by current plan (with 5s cache)
+# Smart query: auto-match by current plan (with cache)
 node src/query/query-usage-smart.mjs
 
 # Query all plans
@@ -144,7 +144,8 @@ Query scripts support the following arguments:
 |          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                                                         |
 |           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (`c`) / `agent` (`a`); falls back to the account's `type`, then `coding` (ignored by all/smart scripts) |
 |         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                    |
-| `--hide-on-monthly-exhausted` |   -   | Skip this query's output when monthly quota exhausted: `true`/`false` (default `false`; ignored by the smart script)                       |
+| `--hide-on-monthly-exhausted` |   -   | Hide this query's output when monthly quota is exhausted (`true`/`false`, default `false`; ignored by the smart script)                    |
+|  `--hide-on-no-active-plan`   |   -   | Hide this query's output when there is no active plan (`true`/`false`, default `false`; only effective for the `all` script)               |
 
 > Login scripts (`login-qwen`/`login-opencode`) only support the `--position`/`-p` argument. `position` ranges 0~N (N = current account count): `< N` updates an existing account, `= N` creates a new one; out-of-range prompts re-entry, and opening the browser asks for confirmation.
 
@@ -265,9 +266,8 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 Notes:
 
-- When a free model is detected, all accounts are displayed instead
-- If no matching account is found, the script exits silently (no output)
-- Query results are cached for 5 seconds (`tmp/cache-usage.json`) to reduce API calls under frequent refreshes
+- When a free model is detected or no matching account is found, all accounts are displayed instead
+- Query results are cached for 5 seconds, and error results for 30 seconds (`tmp/cache-usage.json`), to reduce API calls under frequent refreshes
 - Running the sub-scripts manually does not use the cache
 
 ## Usage with ccstatusline / ccstatusline-zh
@@ -278,7 +278,7 @@ It is recommended to configure `query-usage-smart.mjs` as a custom command in cc
 node F:/xxx/query-usage-smart.mjs
 ```
 
-- Recommended custom command timeout: 6000ms
+- Recommended: set the custom command timeout greater than the script's internal timeout (10 seconds), otherwise the status bar will show a display error
 - To display colored percentages, check "preserve colors" for the custom command in ccstatusline / ccstatusline-zh
 
 ## Changelog

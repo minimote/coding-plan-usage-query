@@ -1,5 +1,35 @@
 # 更新日志
 
+## v2.5.0-2026.07.30
+
+### 新增
+
+- `--hide-on-no-active-plan` 参数（仅 `all` 脚本生效）：账号无活跃订阅或订阅过期时隐藏该行输出（`true`/`false`，默认 `false`）；`smart` 脚本在两种兜底场景（使用免费模型 / 匹配不到账号）下自动启用，与 `--hide-on-monthly-exhausted` 一同强制隐藏月度用完与无活跃套餐的账号
+- 负缓存机制：错误结果单独使用 30s TTL（`NEG_CACHE_TTL_MS`），避免故障期负缓存过期后又等满请求超时反复轰炸上游；正缓存仍为 5s（`CACHE_TTL_MS`）。`readCache` 按 `entry.output` 是否为字符串区分正负缓存并选用对应 TTL
+- 统一请求超时常量 `REQUEST_TIMEOUT_MS = 10000`：ark / ollama / opencode-go / qwen 四个查询脚本共用，替换各自硬编码的 3000 / 5000ms；ccstatusline 自定义命令超时建议相应改为大于此值
+- 无活跃套餐识别：新增 `NO_ACTIVE_PLAN` 常量，各查询脚本在判定账号无订阅 / 订阅过期降级时抛出含此标记的错误，`all` 脚本据此过滤输出行（匹配 `ERROR_MARK + NO_ACTIVE_PLAN`，不扫整行以免误杀自定义标签）
+- Ollama 套餐类型解析：新增 `parsePlanType`，从 settings 页面 "Cloud usage" 标题右侧带 `capitalize` class 的 span 提取套餐类型，`free`（未订阅 / 已过期降级）视为无活跃套餐
+- `smart` 脚本匹配不到账号时改为查询全部账号用量（原为静默退出），与免费模型兜底共用 `queryAllFallback`，保证两处显示效果一致
+- 错误标记常量 `ERROR_MARK`（`❌` 后随一个空格）：各查询 / 登录脚本的错误前缀统一引用，`all` 脚本过滤无活跃套餐行时据此定位错误消息，与渲染逻辑共用同一常量保持同步
+
+### 变更
+
+- 渲染降噪与精简：移除 10 格进度条 `bar`，`pctSegment` 改为只渲染着色百分比；窗口间分隔符 `|` 与倒计时 `↻` 改用灰色（#808080）降噪，窗口标签改用白色（#E0E0E0），倒计时改用白色与百分比区分；`AUTO` 档宽度估算改用 `_plain` 模式直接生成纯文本测宽，不再先渲染完整 ANSI 再用正则剥色
+- 颜色常量重构：`LABEL`（亮白 ANSI 97）改为真彩色 `WHITE`（#E0E0E0），新增 `GRAY`（#808080）；`colorful-tokens` 异常问号同步改用 `WHITE`
+- `query-usage-all` 输出顺序调整为 ark → ollama → opencode → qwen；并向各查询函数透传已解析的 `_config`，避免每个账号重复读取 `config.json`
+- 错误标签前缀提前解析：ark / opencode-go 在校验凭据前先 `resolvePrefixes`，使缺凭据等早期错误也能用正确的账号 / 类型标签渲染（仅 `loadConfig` / `findAccount` 这类更早的错误回退到默认标签）
+- `colorful-tokens` 着色阈值调整：[0,128k) 绿 / [128k,256k) 黄 / [256k,512k) 橙 / [512k,+∞) 红（原为 256k / 384k / 512k 三档），更贴合上下文窗口实际占比
+- OpenCodeGo 鉴权失败判定重写：改用 `resp.url` 跳转到 `auth.opencode.ai/authorize` 判定 cookie 过期 / workspace_id 不属于该账号，与「无活跃套餐」（以 `data-slot="subscribe-button"` 正向认定）区分，分别给出修复凭据与允许 smart 兜底隐藏的不同提示
+- `preview.mjs` 假数据：火山方舟 `coding` 与 `agent` 样本对调，使颜色按阅读顺序循环
+- `scripts/query-usage-all.cmd` 透传 `--hide-on-no-active-plan=false`
+- 单元测试：新增 `parsePlanType`（pro / free / 空格大小写 / 缺失场景）、`parseArgs` 的 `hideOnNoActivePlan` 用例；`colorful-tokens` 阈值与边界用例随新档位更新；移除已删除的 `bar` 与 `pctSegment` 进度条用例
+- README / README_EN 更新：smart 兜底说明改为「免费模型或匹配不到账号均显示全部」、缓存说明补充「错误结果缓存 30 秒」、ccstatusline 超时建议改为大于 10s、参数表新增 `--hide-on-no-active-plan`
+
+### 修复
+
+- `colorful-tokens` token 字段未强制转数字：若上游传入字符串会字符串拼接而非求和，改用一元 `+` 转数字
+- `readCache` 遍历 usage 键时局部变量 `key` 遮蔽外层缓存键，改名为 `usageKey` 消除遮蔽
+
 ## v2.4.0-2026.07.27
 
 ### 新增

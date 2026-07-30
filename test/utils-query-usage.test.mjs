@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import {
     DISPLAY,
     TYPE,
-    bar,
     pctColorCode,
     pctSegment,
     toCountdown,
@@ -23,17 +22,6 @@ import {
 
 // #region 渲染 ----------------
 
-test("bar: 10 格进度条，按百分比填充", () => {
-    assert.equal(bar(0), "░░░░░░░░░░");
-    assert.equal(bar(50), "█████░░░░░");
-    assert.equal(bar(100), "██████████");
-    // 四舍五入：14% -> 1 格，15% -> 2 格
-    assert.equal(bar(14), "█░░░░░░░░░");
-    assert.equal(bar(15), "██░░░░░░░░");
-    // 超出上限钳制为 10 格
-    assert.equal(bar(150), "██████████");
-});
-
 test("pctColorCode: 按用量分档着色", () => {
     assert.equal(pctColorCode(0), COLORS.GREEN);
     assert.equal(pctColorCode(59), COLORS.GREEN);
@@ -45,19 +33,10 @@ test("pctColorCode: 按用量分档着色", () => {
     assert.equal(pctColorCode(150), COLORS.RED);
 });
 
-test("pctSegment: short 档仅百分比，long 档含进度条", () => {
-    const shortSeg = pctSegment(50, DISPLAY.SHORT);
-    assert.ok(shortSeg.includes("50%"));
-    assert.ok(!shortSeg.includes("█"));
-
-    const longSeg = pctSegment(50, DISPLAY.LONG);
-    assert.ok(longSeg.includes("█████░░░░░"));
-    assert.ok(longSeg.includes("50%"));
-});
-
-test("pctSegment: 百分比四舍五入到整数", () => {
-    const seg = pctSegment(12.6, DISPLAY.SHORT);
+test("pctSegment: 渲染着色百分比，四舍五入到整数", () => {
+    const seg = pctSegment(12.6);
     assert.ok(seg.includes("13%"));
+    assert.ok(!seg.includes("█"));
 });
 
 test("toCountdown: long 档中文倒计时", () => {
@@ -225,6 +204,7 @@ test("parseArgs: 全默认值（type 为 undefined，由调用方回退）", () 
     assert.equal(parsed.type, undefined);
     assert.equal(parsed.position, 0);
     assert.equal(parsed.hideOnMonthlyExhausted, false);
+    assert.equal(parsed.hideOnNoActivePlan, false);
 });
 
 test("parseArgs: 显式传参", () => {
@@ -239,11 +219,14 @@ test("parseArgs: 显式传参", () => {
         "2",
         "--hide-on-monthly-exhausted",
         "true",
+        "--hide-on-no-active-plan",
+        "true",
     ]);
     assert.equal(parsed.type, TYPE.AGENT);
     assert.equal(parsed.display, DISPLAY.SHORT);
     assert.equal(parsed.position, 2);
     assert.equal(parsed.hideOnMonthlyExhausted, true);
+    assert.equal(parsed.hideOnNoActivePlan, true);
 });
 
 test("parseArgs: 缩写参数", () => {

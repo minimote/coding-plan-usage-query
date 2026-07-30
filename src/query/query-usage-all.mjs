@@ -9,6 +9,7 @@
  * 参数:
  *   --display / -d    显示模式：auto(a,默认) | long(l) | short(s)
  *   --hide-on-monthly-exhausted  月度用量耗尽时隐藏该行（true|false，默认 false）
+ *   --hide-on-no-active-plan     无活跃套餐时隐藏该行（true|false，默认 false）
  *
  * 各 ark 账号用自己的 type 配置，不接受 --type 覆盖
  *
@@ -17,6 +18,8 @@
 
 import {
     KEYS,
+    NO_ACTIVE_PLAN,
+    ERROR_MARK,
     loadConfig,
     parseArgs,
     isMainModule,
@@ -34,9 +37,9 @@ import { queryUsage as queryQwen } from "./query-usage-qwen.mjs";
  * key 顺序即输出顺序（smart 的匹配顺序与此一致）
  */
 export const QUERY_FNS = Object.freeze({
-    [KEYS.OPENCODE]: queryOpencode,
     [KEYS.ARK]: queryArk,
     [KEYS.OLLAMA]: queryOllama,
+    [KEYS.OPENCODE]: queryOpencode,
     [KEYS.QWEN]: queryQwen,
 });
 
@@ -46,15 +49,17 @@ export const QUERY_FNS = Object.freeze({
  * 不抛出异常：单账号出错时该行为错误字符串（由子查询函数保证），
  * 配置读取失败等整体错误返回 "❌ ..." 单行
  *
- * @param {object} [options] 透传给各查询函数（display/hideOnMonthlyExhausted/cache）
+ * @param {object} [options] 透传给各查询函数（display/hideOnMonthlyExhausted/hideOnNoActivePlan/cache）
+ * @param {boolean} [options.hideOnNoActivePlan=false] 无活跃套餐时隐藏该行
  * @returns {Promise<string>} 多行输出（空行已过滤，无换行结尾）
  */
 export async function queryAll(options = {}) {
+    const { hideOnNoActivePlan = false } = options;
     let cfg;
     try {
         cfg = loadConfig();
     } catch (err) {
-        return `❌ ${err.message}`;
+        return `${ERROR_MARK}${err.message}`;
     }
 
     /** @type {Promise<string>[]} */
@@ -67,15 +72,17 @@ export async function queryAll(options = {}) {
         }
 
         for (let i = 0; i < accounts.length; i++) {
-            tasks.push(queryFn({ ...options, position: i }));
+            tasks.push(queryFn({ ...options, _config: cfg, position: i }));
         }
     }
 
     if (tasks.length === 0) {
-        return "❌ 未找到可查询的账号";
+        return `${ERROR_MARK}未找到可查询的账号`;
     }
 
-    const outputs = (await Promise.all(tasks)).filter((s) => s !== "");
+    const outputs = (await Promise.all(tasks)).filter(
+        (s) => s !== "" && !(hideOnNoActivePlan && s.includes(ERROR_MARK + NO_ACTIVE_PLAN)),
+    );
     return outputs.join("\n");
 }
 
@@ -85,11 +92,16 @@ export async function queryAll(options = {}) {
 
 async function main() {
     try {
-        const { display, hideOnMonthlyExhausted } = parseArgs(process.argv);
-        const output = await queryAll({ display, hideOnMonthlyExhausted });
+        const { display, hideOnMonthlyExhausted, hideOnNoActivePlan } =
+            parseArgs(process.argv);
+        const output = await queryAll({
+            display,
+            hideOnMonthlyExhausted,
+            hideOnNoActivePlan,
+        });
         process.stdout.write(output);
     } catch (err) {
-        process.stdout.write(`❌ ${err.message}\n`);
+        process.stdout.write(`${ERROR_MARK}${err.message}\n`);
     }
 }
 
