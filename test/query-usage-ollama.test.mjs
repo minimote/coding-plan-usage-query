@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
     parseUsageWindows,
     parseDurationString,
+    parsePlanType,
 } from "../src/query/query-usage-ollama.mjs";
 
 // #region parseDurationString ----------------
@@ -136,3 +137,41 @@ test("parseUsageWindows: 无用量数据时两窗口均 null", () => {
 });
 
 // #endregion parseUsageWindows --------------------------------
+
+// #region parsePlanType ----------------
+
+/**
+ * 构造 Cloud usage 标题 + 套餐类型 span 的 HTML 片段
+ *
+ * 真实页面：h2 内紧邻 "Cloud usage" span 后跟带 capitalize class 的套餐类型 span
+ */
+function makePlanHtml(plan) {
+    return (
+        `<h2 class="text-xl font-medium flex items-center space-x-2">` +
+        `<span>Cloud usage</span>` +
+        `<span class="text-xs font-normal px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 capitalize">${plan}</span>` +
+        `</h2>`
+    );
+}
+
+test("parsePlanType: pro 账号返回 pro", () => {
+    assert.equal(parsePlanType(makePlanHtml("pro")), "pro");
+});
+
+test("parsePlanType: free 账号返回 free", () => {
+    assert.equal(parsePlanType(makePlanHtml("free")), "free");
+});
+
+test("parsePlanType: 文本带空格/大写 → trim 后小写", () => {
+    assert.equal(parsePlanType(makePlanHtml("  Free  ")), "free");
+});
+
+test("parsePlanType: 无 capitalize span 返回 null", () => {
+    assert.equal(parsePlanType("<h2><span>Cloud usage</span></h2>"), null);
+});
+
+test("parsePlanType: 无 Cloud usage 区块返回 null", () => {
+    assert.equal(parsePlanType("<html>no usage here</html>"), null);
+});
+
+// #endregion parsePlanType --------------------------------

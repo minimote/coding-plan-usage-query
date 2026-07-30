@@ -12,7 +12,7 @@ import { writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import readline from "node:readline";
-import { CONFIG_PATH, isMainModule, loadConfig } from "./utils-query-usage.mjs";
+import { CONFIG_PATH, isMainModule, loadConfig, ERROR_MARK } from "./utils-query-usage.mjs";
 
 const TMP_DIR = join(
     dirname(fileURLToPath(import.meta.url)),
@@ -432,13 +432,13 @@ export async function runLogin({
             );
         } else {
             process.stderr.write(
-                `❌ 登录成功但凭据未写入 config.json（见上方输出，请手动添加到 ${key}[${pos}]）\n`,
+                `${ERROR_MARK}登录成功但凭据未写入 config.json（见上方输出，请手动添加到 ${key}[${pos}]）\n`,
             );
         }
         return result.configUpdate;
     } catch (err) {
         if (err instanceof CanceledError) {
-            process.stderr.write(`❌ ${err.message}\n`);
+            process.stderr.write(`${ERROR_MARK}${err.message}\n`);
             return null;
         }
         throw err;

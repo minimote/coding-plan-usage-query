@@ -1,7 +1,7 @@
 /**
  * @file 用量查询工具函数
  *
- * 包含枚举常量、参数校验、结果缓存、进度条渲染、终端宽度适配、
+ * 包含枚举常量、参数校验、结果缓存、终端宽度适配、
  * 倒计时格式、百分比着色、窗口渲染、配置文件、标签解析、账号匹配、
  * 参数解析等公共工具
  */
@@ -68,6 +68,7 @@ export const ARGS = Object.freeze({
     POSITION: "--position",
     POSITION_SHORT: "-p",
     HIDE_ON_MONTHLY_EXHAUSTED: "--hide-on-monthly-exhausted",
+    HIDE_ON_NO_ACTIVE_PLAN: "--hide-on-no-active-plan",
 });
 
 /**
@@ -75,10 +76,13 @@ export const ARGS = Object.freeze({
  * @enum {string}
  */
 export const COLORS = Object.freeze({
-    /** 默认颜色，重置时间 */
+    /** 重置颜色 */
     RESET: "\x1b[0m",
-    /** 亮白，窗口标签 */
-    LABEL: "\x1b[97m",
+
+    /** 灰 #808080 */
+    GRAY: "\x1b[38;2;128;128;128m",
+    /** 白 #E0E0E0 */
+    WHITE: "\x1b[38;2;224;224;224m",
     /** 绿 #3FB950 */
     GREEN: "\x1b[38;2;63;185;80m",
     /** Claude 橙色 #D97757 */
@@ -161,6 +165,23 @@ export const WINDOW_LABELS = deepFreeze({
     [WINDOW.MONTHLY]: { long: "每月", short: "月" },
 });
 
+/**
+ * 无活跃套餐标记
+ *
+ * 各查询脚本判定账号无订阅/订阅过期时，在抛出的错误消息中包含此字符串；
+ * all 脚本开启 --hide-on-no-active-plan 时，据此过滤掉对应输出行。
+ * 过滤匹配错误消息部分（ERROR_MARK + NO_ACTIVE_PLAN），不扫整行，避免自定义标签含此字样被误杀
+ */
+export const NO_ACTIVE_PLAN = "无活跃套餐";
+
+/**
+ * 错误行标记
+ *
+ * renderErrorLine 在错误消息前固定输出此前缀；all 脚本过滤无活跃套餐行时
+ * 据此定位错误消息，与渲染逻辑共用同一常量保持同步
+ */
+export const ERROR_MARK = "❌ ";
+
 // #endregion 枚举常量 --------------------------------
 
 // #region 参数解析 ----------------
@@ -168,7 +189,7 @@ export const WINDOW_LABELS = deepFreeze({
 /**
  * 命令行参数解析
  *
- * 返回 { display, type, position, hideOnMonthlyExhausted }
+ * 返回 { display, type, position, hideOnMonthlyExhausted, hideOnNoActivePlan }
  * --type 未传时返回 undefined，由调用方回退到账号 type / 默认 coding
  * 参数非法时抛出 Error，由调用方的 catch 处理
  *
@@ -178,6 +199,7 @@ export const WINDOW_LABELS = deepFreeze({
  *     type: "coding" | "agent" | undefined,
  *     position: number,
  *     hideOnMonthlyExhausted: boolean,
+ *     hideOnNoActivePlan: boolean,
  * }}
  */
 export function parseArgs(argv) {
@@ -209,6 +231,10 @@ export function parseArgs(argv) {
                     type: "string",
                     default: "false",
                 },
+                [ARGS.HIDE_ON_NO_ACTIVE_PLAN.slice(2)]: {
+                    type: "string",
+                    default: "false",
+                },
             },
         });
     } catch (err) {
@@ -235,8 +261,10 @@ export function parseArgs(argv) {
     }
     const hide = parsed.values[ARGS.HIDE_ON_MONTHLY_EXHAUSTED.slice(2)];
     const hideOnMonthlyExhausted = hide === "true";
+    const hideNoActive = parsed.values[ARGS.HIDE_ON_NO_ACTIVE_PLAN.slice(2)];
+    const hideOnNoActivePlan = hideNoActive === "true";
 
-    return { display, type, position, hideOnMonthlyExhausted };
+    return { display, type, position, hideOnMonthlyExhausted, hideOnNoActivePlan };
 }
 
 /**
@@ -300,11 +328,26 @@ const CACHE_DIR = join(
 const CACHE_PATH = join(CACHE_DIR, "cache-usage.json");
 
 /**
- * 缓存有效期（毫秒）
+ * 正缓存有效期（毫秒）
  *
- * 高频调用时减少上游 API 请求，且远快于用量数据的实际变化速度
+ * 成功用量的复用窗口：高频调用时减少上游 API 请求，且远快于用量数据的实际变化速度
  */
 export const CACHE_TTL_MS = 5000;
+
+/**
+ * 负缓存有效期（毫秒）
+ *
+ * 错误结果的复用窗口：须 > REQUEST_TIMEOUT_MS，否则故障期会在负缓存过期后
+ * 再次等满超时；设 30s 使故障期每 30s 才重试一次上游，既不轰炸也尽快自愈
+ */
+export const NEG_CACHE_TTL_MS = 30000;
+
+/**
+ * 单次请求超时（毫秒）
+ *
+ * 四个查询脚本共用；仅在卡住时触发，正常请求快则快，设大无日常代价
+ */
+export const REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * 读取缓存条目
@@ -327,7 +370,9 @@ export function readCache(key) {
         return null;
     }
     const elapsedMs = Date.now() - entry.ts;
-    if (elapsedMs < 0 || elapsedMs >= CACHE_TTL_MS) {
+    // 负缓存（错误）用更长的 TTL，避免故障期反复等满超时轰炸上游
+    const ttl = typeof entry.output === "string" ? NEG_CACHE_TTL_MS : CACHE_TTL_MS;
+    if (elapsedMs < 0 || elapsedMs >= ttl) {
         return null;
     }
 
@@ -344,8 +389,8 @@ export function readCache(key) {
     const shift = (w) =>
         w == null ? null : { pct: w.pct, sec: Math.max(0, w.sec - elapsedSec) };
     const shifted = {};
-    for (const key of Object.keys(entry.usage)) {
-        shifted[key] = shift(entry.usage[key]);
+    for (const usageKey of Object.keys(entry.usage)) {
+        shifted[usageKey] = shift(entry.usage[usageKey]);
     }
     return { usage: shifted };
 }
@@ -432,17 +477,6 @@ export function isMainModule(moduleUrl) {
 // #region 渲染 ----------------
 
 /**
- * 渲染 10 格进度条
- *
- * @param {number} pct 百分比 0-100
- * @returns {string} 形如 "█████░░░░░" 的 10 格字符串
- */
-export function bar(pct) {
-    const n = Math.round(pct / 10);
-    return "█".repeat(Math.min(n, 10)).padEnd(10, "░");
-}
-
-/**
  * 根据用量百分比返回 ANSI 颜色转义序列
  *
  * @param {number} pct 百分比 0-100
@@ -464,17 +498,12 @@ export function pctColorCode(pct) {
 /**
  * 渲染用量百分比段（带按用量分档的 ANSI 颜色）
  *
- * @param {number} pct       百分比 0-100
- * @param {"long" | "short"} display 展示档位
- * @returns {string} long=进度条+百分比，short=仅百分比
+ * @param {number} pct 百分比 0-100
+ * @returns {string} 形如 "<color>42%<reset>" 的着色百分比
  */
-export function pctSegment(pct, display) {
+export function pctSegment(pct) {
     const color = pctColorCode(pct);
-    const pctStr = `${color}${Math.round(pct)}%${COLORS.RESET}`;
-    if (display === DISPLAY.SHORT) {
-        return pctStr;
-    }
-    return `${bar(pct)} ${pctStr}`;
+    return `${color}${Math.round(pct)}%${COLORS.RESET}`;
 }
 
 /**
@@ -556,12 +585,15 @@ function getVisibleWidth(s) {
  *
  * 按 WINDOW 定义顺序遍历 usage 中存在的窗口：不含某键则不输出（平台无此窗口）；
  * 键存在但值为 null 时显示 "标签:--"（数据缺失）；非 null 时渲染百分比段和倒计时
- * 标签+冒号用亮白（97）高亮，百分比按用量分档着色（绿/黄/橙/红），倒计时保持默认色
+ * 窗口标签用白色（#E0E0E0），百分比按 pct 分档着色（绿/黄/橙/红）；null 窗口标签同样用白；
+ * 倒计时用白（#E0E0E0）与百分比区分；窗口间的分隔符 | 用灰（#808080）降噪，凸显数据
  * 百分比限制在 0–100，秒数限制为 ≥0
  *
  * @param {Object<string, ({ pct: number, sec: number } | null)>} usage 用量窗口数据，键为 WINDOW 常量值
  * @param {"auto" | "long" | "short"} display 展示档位
  * @param {{ long: string, short: string }} [prefixes] 可选，提供时返回 "前缀 | 窗口文本"
+ * @param {boolean} [hideOnMonthlyExhausted=false]
+ * @param {boolean} [_plain=false] 内部：返回无 ANSI 颜色码的纯文本，仅供 AUTO 档估算宽度
  * @returns {string}
  */
 export function renderWindows(
@@ -569,6 +601,7 @@ export function renderWindows(
     display,
     prefixes,
     hideOnMonthlyExhausted = false,
+    _plain = false,
 ) {
     // 月用量用尽时整体隐藏（monthly 不存在或为 null 时无月度数据，不隐藏）
     if (
@@ -582,17 +615,23 @@ export function renderWindows(
     if (display === DISPLAY.AUTO) {
         const width = getTermWidth();
         if (width) {
-            const longText = renderWindows(
+            // 用纯文本估算长版宽度，避免先渲染完整 ANSI 再丢弃
+            const longPlain = renderWindows(
                 usage,
                 DISPLAY.LONG,
                 prefixes,
                 hideOnMonthlyExhausted,
+                true,
             );
-            const plain = longText.replace(/\x1b\[[\d;]*m/g, "");
             // 给前后留出 5 字符的间距
-            const measured = getVisibleWidth(plain) + 5;
+            const measured = getVisibleWidth(longPlain) + 5;
             if (measured <= width) {
-                return longText;
+                return renderWindows(
+                    usage,
+                    DISPLAY.LONG,
+                    prefixes,
+                    hideOnMonthlyExhausted,
+                );
             }
         }
         return renderWindows(
@@ -604,25 +643,33 @@ export function renderWindows(
     }
 
     const mode = display === DISPLAY.SHORT ? "short" : "long";
+    // _plain 模式省略 ANSI 颜色码，用于 AUTO 档宽度估算
+    const W = _plain ? "" : COLORS.WHITE;
+    const R = _plain ? "" : COLORS.RESET;
+    const G = _plain ? "" : COLORS.GRAY;
+    const P = _plain ? "" : COLORS.PREFIX;
     const segs = Object.values(WINDOW)
         .filter((key) => key in usage)
         .map((key) => {
             const item = usage[key];
-            // 标签+冒号用亮白高亮
-            const label = `${COLORS.LABEL}${WINDOW_LABELS[key][mode]}:${COLORS.RESET}`;
             if (item === null) {
-                return `${label}--`;
+                // 数据缺失：标签用亮白，后跟两个连字符
+                return `${W}${WINDOW_LABELS[key][mode]}:${R}--`;
             }
             const pct = Math.max(0, Math.min(Math.round(item.pct), 100));
             const sec = Math.max(0, Math.round(item.sec));
-            return `${label}${pctSegment(pct, display)} ↻ ${toCountdown(sec, display)}`;
+            // 标签用白色，百分比按用量分档着色
+            const label = `${W}${WINDOW_LABELS[key][mode]}:${R}`;
+            const pctSeg = _plain ? `${pct}%` : pctSegment(pct);
+            return `${label}${pctSeg} ${G}↻ ${toCountdown(sec, display)}${R}`;
         });
-    const windowsText = segs.join(" | ");
+    const sep = `${G} | ${R}`;
+    const windowsText = segs.join(sep);
 
     if (prefixes) {
         const prefix =
             display === DISPLAY.SHORT ? prefixes.short : prefixes.long;
-        return `${COLORS.PREFIX}${prefix}${COLORS.RESET} | ${windowsText}`;
+        return `${P}${prefix}${R}${sep}${windowsText}`;
     }
     return windowsText;
 }
@@ -637,7 +684,7 @@ export function renderWindows(
  */
 export function renderErrorLine(labels, display, message) {
     const mode = display === DISPLAY.SHORT ? DISPLAY.SHORT : DISPLAY.LONG;
-    return `${COLORS.PREFIX}${labels[mode]}${COLORS.RESET} | ❌ ${message}`;
+    return `${COLORS.PREFIX}${labels[mode]}${COLORS.RESET} | ${ERROR_MARK}${message}`;
 }
 
 // #endregion 渲染 --------------------------------

@@ -9,7 +9,7 @@
  */
 
 import { runLogin, isMainModule } from "../utils/utils-login.mjs";
-import { parseArgs } from "../utils/utils-query-usage.mjs";
+import { parseArgs, ERROR_MARK } from "../utils/utils-query-usage.mjs";
 
 const LOGIN_URL =
     "https://platform.qianwenai.com/home/billing/subscription/token-plan-individual";
@@ -58,12 +58,12 @@ if (isMainModule(import.meta.url)) {
                 // 成功消息在 doLogin 内部输出
             },
             (err) => {
-                process.stderr.write(`❌ 登录失败：${err.message}\n`);
+                process.stderr.write(`${ERROR_MARK}登录失败：${err.message}\n`);
                 process.exitCode = 1;
             },
         );
     } catch (err) {
-        process.stderr.write(`❌ 登录失败：${err.message}\n`);
+        process.stderr.write(`${ERROR_MARK}登录失败：${err.message}\n`);
         process.exitCode = 1;
     }
 }

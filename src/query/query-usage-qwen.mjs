@@ -27,6 +27,7 @@ import {
     writeCache,
     isMainModule,
     parseArgs,
+    REQUEST_TIMEOUT_MS,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -98,7 +99,7 @@ async function callUsageApi(cookie) {
             "user-agent": UA,
         },
         body: BODY,
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!resp.ok) {
@@ -197,6 +198,7 @@ async function fetchUsage(cookie) {
  * @param {number} [options.position=0] 账号位置
  * @param {"auto"|"long"|"short"} [options.display=DISPLAY.AUTO] 展示档位
  * @param {boolean} [options.cache=false] 启用结果缓存
+ * @param {object} [options._config] 内部：已解析的 config 对象，避免重复读取
  * @returns {Promise<string>} 输出行
  */
 export async function queryUsage(options = {}) {
@@ -206,7 +208,7 @@ export async function queryUsage(options = {}) {
     // 是否已进入网络查询阶段：仅对此后的失败写负缓存（配置类错误不写，原因同 ark）
     let reachedFetch = false;
     try {
-        const cfg = loadConfig();
+        const cfg = options._config || loadConfig();
         const account = findAccount(cfg[KEY], position);
         prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
         const cookie = (account.cookie || "").trim();

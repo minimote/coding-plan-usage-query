@@ -14,14 +14,14 @@ import { COLORS } from "../src/utils/utils-query-usage.mjs";
 // #region colorForTokens ----------------
 
 test("colorForTokens: 四档阈值与边界", () => {
-    // [0, 256k) 绿
+    // [0, 128k) 绿
     assert.equal(colorForTokens(0), COLORS.GREEN);
-    assert.equal(colorForTokens(255999), COLORS.GREEN);
-    // [256k, 384k) 黄
-    assert.equal(colorForTokens(256000), COLORS.YELLOW);
-    assert.equal(colorForTokens(383999), COLORS.YELLOW);
-    // [384k, 512k) 橙
-    assert.equal(colorForTokens(384000), COLORS.ORANGE);
+    assert.equal(colorForTokens(127999), COLORS.GREEN);
+    // [128k, 256k) 黄
+    assert.equal(colorForTokens(128000), COLORS.YELLOW);
+    assert.equal(colorForTokens(255999), COLORS.YELLOW);
+    // [256k, 512k) 橙
+    assert.equal(colorForTokens(256000), COLORS.ORANGE);
     assert.equal(colorForTokens(511999), COLORS.ORANGE);
     // [512k, +∞) 红
     assert.equal(colorForTokens(512000), COLORS.RED);
@@ -56,8 +56,8 @@ test("renderFromRaw: input+output 求和后着色", () => {
         },
     });
     const out = renderFromRaw(raw);
-    // 150k 落在 [0,256k) 绿档
-    assert.ok(out.startsWith(COLORS.GREEN));
+    // 150k 落在 [128k,256k) 黄档
+    assert.ok(out.startsWith(COLORS.YELLOW));
     assert.ok(out.includes("150k"));
     assert.ok(out.endsWith(COLORS.RESET));
 });
@@ -90,12 +90,12 @@ test("renderFromRaw: 缺失 token 字段视为 0", () => {
 test("renderFromRaw: 非法 JSON 返回亮白问号", () => {
     assert.equal(
         renderFromRaw("{not json"),
-        `${COLORS.LABEL}?${COLORS.RESET}`,
+        `${COLORS.WHITE}?${COLORS.RESET}`,
     );
 });
 
 test("renderFromRaw: 空字符串返回亮白问号", () => {
-    assert.equal(renderFromRaw(""), `${COLORS.LABEL}?${COLORS.RESET}`);
+    assert.equal(renderFromRaw(""), `${COLORS.WHITE}?${COLORS.RESET}`);
 });
 
 // #endregion renderFromRaw --------------------------------
