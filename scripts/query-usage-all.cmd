@@ -6,5 +6,5 @@ echo.
 node src\query\query-usage-all.mjs --display=long --hide-on-monthly-exhausted=false --hide-on-no-active-plan=false
 echo.
 echo.
-echo 按任意键继续...
+echo 按任意键退出...
 pause >nul

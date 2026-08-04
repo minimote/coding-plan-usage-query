@@ -14,9 +14,10 @@ import { parseUsageWindows } from "../src/query/query-usage-opencode-go.mjs";
  */
 function makeHtml(windows) {
     let js = "";
-    for (const [name, pct, sec] of windows) {
-        js += `${name}Usage:$R[${Math.floor(Math.random() * 100)}]={usagePercent:${pct},resetInSec:${sec},other:"x"};`;
-    }
+    // 用确定性索引（i+1）而非随机数，避免测试偶发失败
+    windows.forEach(([name, pct, sec], i) => {
+        js += `${name}Usage:$R[${i + 1}]={usagePercent:${pct},resetInSec:${sec},other:"x"};`;
+    });
     return `<html><script>window.__data={${js}};</script></html>`;
 }
 

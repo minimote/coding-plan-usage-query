@@ -1,5 +1,27 @@
 # 更新日志
 
+## v2.6.0-2026.08.05
+
+### 新增
+
+- 百分比端点保护 `formatPct`（`utils-query-usage.mjs`）：用量百分比归一为展示整数，两端各留一档——真正 `>=100` 才返回 100、`(99,100)` 一律压到 99；真正 `<=0` 才返回 0、`(0,1)` 一律抬到 1，避免 99.7% 显示成 100%（误以为额度耗尽）、0.3% 显示成 0%（误以为未开始用）；NaN 等非数字脏数据回退 0，±Infinity 越界钳制，函数幂等可重复调用
+- `query-usage-all` 输出分组 `groupOutputs`：有效行（成功查到用量）在前、无效行（含错误标记）在后，两组都非空时中间插一个空行分隔；过滤空串与（可选）无活跃套餐行，抽为纯函数便于单测。配套 `msgPart` 只匹配 " | " 之后的数据段，错误标记 / 无活跃套餐判定不再扫整行
+- `query-usage-smart` 抽出 `matchAccountByApiKey` 纯函数：按 apiKey 在 config 各账号数组中查找（按 QUERY_FNS 顺序取首个命中），供单测覆盖
+- 单元测试：新增 `test/query-usage-all.test.mjs`（分组 / 过滤 / 标签含 ❌ 与「无活跃套餐」字样不误杀）、`test/query-usage-smart.test.mjs`（匹配 key / index、顺序优先、空 apiKey 与空槽位跳过）、`test/utils-cc-switch-getapikey.test.mjs`（getAPIKey 环境变量优先级、PROXY_MANAGED 占位符回退 db 分支）
+
+### 变更
+
+- 颜色 / 百分比分档跟随展示值：`pctColorCode` / `pctSegment` 统一先经 `formatPct` 归一再分档，保证「显示 99%」对应橙色而非红色
+- `query-usage-all` 输出顺序调整：错误行不再与有效行混排，统一垫底并以空行分隔（组内仍保持账号顺序）
+- `query-usage-smart` 查询函数改经 `QUERY_FNS[matched.key]` 取值（原为循环内捕获的闭包变量）
+- `scripts/` 四个 `.cmd` 脚本（login-qwen / login-opencode / preview / query-usage-all）结束提示「按任意键继续…」改为「按任意键退出…」（pause 后脚本即退出）
+- 测试加固：`query-usage-opencode-go` 假数据改用确定性索引（i+1）替代 `Math.random()`，消除偶发失败；`utils-query-usage` 宽度相关测试改用 `stubTermWidth` stub `process.stdout.columns`，不再依赖 `COLUMNS` 环境变量
+
+### 修复
+
+- `hideOnMonthlyExhausted` 月度用尽判定改用 `formatPct`：99.6% 等未真正用尽不再因四舍五入成 100% 而整行凭空消失
+- 自定义账号标签含 ❌ 前缀或「无活跃套餐」字样时不再被误判为错误行 / 被 `--hide-on-no-active-plan` 静默丢弃（原实现整行匹配，现只匹配数据段）
+
 ## v2.5.0-2026.07.30
 
 ### 新增

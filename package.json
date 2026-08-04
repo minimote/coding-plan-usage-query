@@ -1,6 +1,6 @@
 {
     "name": "coding-plan-usage-query",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
     "type": "module",
     "private": true,
