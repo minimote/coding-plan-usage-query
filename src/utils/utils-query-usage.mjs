@@ -264,7 +264,13 @@ export function parseArgs(argv) {
     const hideNoActive = parsed.values[ARGS.HIDE_ON_NO_ACTIVE_PLAN.slice(2)];
     const hideOnNoActivePlan = hideNoActive === "true";
 
-    return { display, type, position, hideOnMonthlyExhausted, hideOnNoActivePlan };
+    return {
+        display,
+        type,
+        position,
+        hideOnMonthlyExhausted,
+        hideOnNoActivePlan,
+    };
 }
 
 /**
@@ -371,7 +377,8 @@ export function readCache(key) {
     }
     const elapsedMs = Date.now() - entry.ts;
     // 负缓存（错误）用更长的 TTL，避免故障期反复等满超时轰炸上游
-    const ttl = typeof entry.output === "string" ? NEG_CACHE_TTL_MS : CACHE_TTL_MS;
+    const ttl =
+        typeof entry.output === "string" ? NEG_CACHE_TTL_MS : CACHE_TTL_MS;
     if (elapsedMs < 0 || elapsedMs >= ttl) {
         return null;
     }
@@ -477,19 +484,58 @@ export function isMainModule(moduleUrl) {
 // #region 渲染 ----------------
 
 /**
+ * 用量百分比 → 展示用整数（带端点保护）
+ *
+ * 100% 与 0% 在用户认知里是「用尽」「未使用」两个状态而非普通数值，
+ * 直接四舍五入会让 99.7% 显示成 100%（误以为额度耗尽）、0.3% 显示成 0%
+ * （误以为尚未开始用）。故对两端各留一档：
+ *   - 真正 >= 100 才返回 100，(99, 100) 一律压到 99
+ *   - 真正 <= 0 才返回 0，(0, 1) 一律抬到 1
+ *   - 中间区间照常四舍五入，不放大偏差
+ *
+ * 各平台上游精度不一（ark/qwen 给原始小数，ollama 给页面已舍入的值），
+ * 不追求逐位复刻官方页面，只保证不误导。幂等，可重复调用
+ *
+ * @param {number} pct 原始百分比，可能是小数，也可能越界
+ * @returns {number} 0-100 的整数
+ */
+export function formatPct(pct) {
+    // 只挡 NaN / 非数字（脏数据视为 0）；±Infinity 交给下面的越界钳制处理
+    if (typeof pct !== "number" || Number.isNaN(pct)) {
+        return 0;
+    }
+    if (pct >= 100) {
+        return 100;
+    }
+    if (pct <= 0) {
+        return 0;
+    }
+    const rounded = Math.round(pct);
+    if (rounded >= 100) {
+        return 99;
+    }
+    if (rounded <= 0) {
+        return 1;
+    }
+    return rounded;
+}
+
+/**
  * 根据用量百分比返回 ANSI 颜色转义序列
  *
  * @param {number} pct 百分比 0-100
  * @returns {string} ANSI 颜色转义序列，0-59% 绿，60-79% 黄，80-99% Claude 橙(#D97757)，100% 红
  */
 export function pctColorCode(pct) {
-    if (pct >= 100) {
+    // 按展示值分档，保证「显示 99%」与「橙色」一致，不会出现显示 99% 却标红
+    const shown = formatPct(pct);
+    if (shown >= 100) {
         return COLORS.RED;
     }
-    if (pct >= 80) {
+    if (shown >= 80) {
         return COLORS.ORANGE;
     }
-    if (pct >= 60) {
+    if (shown >= 60) {
         return COLORS.YELLOW;
     }
     return COLORS.GREEN;
@@ -503,7 +549,7 @@ export function pctColorCode(pct) {
  */
 export function pctSegment(pct) {
     const color = pctColorCode(pct);
-    return `${color}${Math.round(pct)}%${COLORS.RESET}`;
+    return `${color}${formatPct(pct)}%${COLORS.RESET}`;
 }
 
 /**
@@ -587,7 +633,7 @@ function getVisibleWidth(s) {
  * 键存在但值为 null 时显示 "标签:--"（数据缺失）；非 null 时渲染百分比段和倒计时
  * 窗口标签用白色（#E0E0E0），百分比按 pct 分档着色（绿/黄/橙/红）；null 窗口标签同样用白；
  * 倒计时用白（#E0E0E0）与百分比区分；窗口间的分隔符 | 用灰（#808080）降噪，凸显数据
- * 百分比限制在 0–100，秒数限制为 ≥0
+ * 百分比经 formatPct 归一到 0–100 整数（两端做端点保护，见 formatPct），秒数限制为 ≥0
  *
  * @param {Object<string, ({ pct: number, sec: number } | null)>} usage 用量窗口数据，键为 WINDOW 常量值
  * @param {"auto" | "long" | "short"} display 展示档位
@@ -604,10 +650,11 @@ export function renderWindows(
     _plain = false,
 ) {
     // 月用量用尽时整体隐藏（monthly 不存在或为 null 时无月度数据，不隐藏）
+    // 用 formatPct 判定，避免 99.6% 被四舍五入成 100% 而整行凭空消失
     if (
         hideOnMonthlyExhausted &&
         usage.monthly != null &&
-        Math.round(usage.monthly.pct) >= 100
+        formatPct(usage.monthly.pct) >= 100
     ) {
         return "";
     }
@@ -656,7 +703,7 @@ export function renderWindows(
                 // 数据缺失：标签用亮白，后跟两个连字符
                 return `${W}${WINDOW_LABELS[key][mode]}:${R}--`;
             }
-            const pct = Math.max(0, Math.min(Math.round(item.pct), 100));
+            const pct = formatPct(item.pct);
             const sec = Math.max(0, Math.round(item.sec));
             // 标签用白色，百分比按用量分档着色
             const label = `${W}${WINDOW_LABELS[key][mode]}:${R}`;

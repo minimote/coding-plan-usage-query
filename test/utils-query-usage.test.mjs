@@ -9,6 +9,7 @@ import {
     TYPE,
     pctColorCode,
     pctSegment,
+    formatPct,
     toCountdown,
     renderWindows,
     renderErrorLine,
@@ -22,6 +23,62 @@ import {
 
 // #region 渲染 ----------------
 
+/**
+ * 临时覆盖 process.stdout.columns（getTermWidth 优先读它），返回恢复函数
+ *
+ * 真实 TTY 下 process.stdout.columns 有实际值，设 COLUMNS 环境变量不生效，
+ * 宽度相关测试会随终端宽度忽绿忽红；显式 stub 可让测试结果可移植
+ *
+ * @param {number} width 模拟的终端宽度（列数）
+ * @returns {() => void} 恢复原状的函数
+ */
+function stubTermWidth(width) {
+    const desc = Object.getOwnPropertyDescriptor(process.stdout, "columns");
+    Object.defineProperty(process.stdout, "columns", {
+        value: width,
+        configurable: true,
+    });
+    return () => {
+        if (desc) {
+            Object.defineProperty(process.stdout, "columns", desc);
+        } else {
+            delete process.stdout.columns;
+        }
+    };
+}
+
+test("formatPct: 中间区间正常四舍五入", () => {
+    assert.equal(formatPct(0), 0);
+    assert.equal(formatPct(1), 1);
+    assert.equal(formatPct(42.4), 42);
+    assert.equal(formatPct(42.6), 43);
+    assert.equal(formatPct(100), 100);
+});
+
+test("formatPct: 上端点保护，未真正用尽不显示 100%", () => {
+    assert.equal(formatPct(99.5), 99);
+    assert.equal(formatPct(99.7), 99);
+    assert.equal(formatPct(99.999), 99);
+    assert.equal(formatPct(100.4), 100);
+    assert.equal(formatPct(150), 100);
+});
+
+test("formatPct: 下端点保护，已开始使用不显示 0%", () => {
+    assert.equal(formatPct(0.01), 1);
+    assert.equal(formatPct(0.4), 1);
+    assert.equal(formatPct(-5), 0);
+});
+
+test("formatPct: 脏数据回退为 0，越界钳制，且幂等", () => {
+    assert.equal(formatPct(NaN), 0);
+    assert.equal(formatPct(undefined), 0);
+    assert.equal(formatPct(Infinity), 100);
+    assert.equal(formatPct(-Infinity), 0);
+    for (const v of [0, 0.3, 42.6, 99.7, 100]) {
+        assert.equal(formatPct(formatPct(v)), formatPct(v));
+    }
+});
+
 test("pctColorCode: 按用量分档着色", () => {
     assert.equal(pctColorCode(0), COLORS.GREEN);
     assert.equal(pctColorCode(59), COLORS.GREEN);
@@ -33,10 +90,20 @@ test("pctColorCode: 按用量分档着色", () => {
     assert.equal(pctColorCode(150), COLORS.RED);
 });
 
+test("pctColorCode: 颜色跟随展示值，99.7% 显示 99% 仍为橙", () => {
+    assert.equal(pctColorCode(99.7), COLORS.ORANGE);
+    assert.equal(pctColorCode(59.6), COLORS.YELLOW);
+});
+
 test("pctSegment: 渲染着色百分比，四舍五入到整数", () => {
     const seg = pctSegment(12.6);
     assert.ok(seg.includes("13%"));
     assert.ok(!seg.includes("█"));
+});
+
+test("pctSegment: 99.7% 渲染为 99% 而非 100%", () => {
+    assert.ok(pctSegment(99.7).includes("99%"));
+    assert.ok(pctSegment(100).includes("100%"));
 });
 
 test("toCountdown: long 档中文倒计时", () => {
@@ -108,6 +175,17 @@ test("renderWindows: hideOnMonthlyExhausted 月度用尽时返回空串", () => 
     );
 });
 
+test("renderWindows: hideOnMonthlyExhausted 未真正用尽时不隐藏", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: { pct: 99.6, sec: 2000000 },
+    };
+    const out = renderWindows(usage, DISPLAY.SHORT, undefined, true);
+    assert.notEqual(out, "");
+    assert.ok(out.includes("99%"));
+});
+
 test("renderWindows: monthly 为 null 时不触发隐藏", () => {
     const usage = {
         rolling: { pct: 10, sec: 1800 },
@@ -136,7 +214,7 @@ test("renderWindows: AUTO 档窄终端回退 SHORT", () => {
         weekly: { pct: 50, sec: 500000 },
         monthly: { pct: 100, sec: 2000000 },
     };
-    process.env.COLUMNS = "20";
+    const restore = stubTermWidth(20);
     try {
         const out = renderWindows(usage, DISPLAY.AUTO, {
             long: "长标签",
@@ -145,7 +223,27 @@ test("renderWindows: AUTO 档窄终端回退 SHORT", () => {
         // 窄终端应回退 short 档（用 short 前缀）
         assert.ok(out.includes(COLORS.PREFIX + "短"));
     } finally {
-        delete process.env.COLUMNS;
+        restore();
+    }
+});
+
+test("renderWindows: AUTO 档宽终端保留 LONG", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: { pct: 100, sec: 2000000 },
+    };
+    const restore = stubTermWidth(200);
+    try {
+        const out = renderWindows(usage, DISPLAY.AUTO, {
+            long: "长标签",
+            short: "短",
+        });
+        // 宽终端应保留 long 档（用 long 前缀 + 长窗口标签）
+        assert.ok(out.includes(COLORS.PREFIX + "长标签"));
+        assert.ok(out.includes("五小时"));
+    } finally {
+        restore();
     }
 });
 

@@ -50,6 +50,39 @@ function isFreeModel() {
 
 // #endregion 免费模型判断 --------------------------------
 
+// #region 账号匹配 ----------------
+
+/**
+ * 在 config 各账号数组中按 apiKey 查找账号
+ *
+ * 按 QUERY_FNS 的 key 顺序遍历，命中第一个含该 apiKey 的账号即返回；
+ * apiKey 为空或所有账号均不匹配时返回 null。纯函数，便于单测
+ *
+ * @param {object} cfg loadConfig() 的结果
+ * @param {string} apiKey 待匹配的 API Key
+ * @returns {{ key: string, index: number, account: object } | null}
+ */
+export function matchAccountByApiKey(cfg, apiKey) {
+    if (!apiKey) {
+        return null;
+    }
+    for (const key of Object.keys(QUERY_FNS)) {
+        const accounts = cfg[key];
+        if (!Array.isArray(accounts)) {
+            continue;
+        }
+        const index = accounts.findIndex(
+            (a) => a && a.apiKey && a.apiKey === apiKey,
+        );
+        if (index >= 0) {
+            return { key, index, account: accounts[index] };
+        }
+    }
+    return null;
+}
+
+// #endregion 账号匹配 --------------------------------
+
 // #region 脚本入口 ----------------
 
 /**
@@ -84,18 +117,7 @@ async function main() {
     const apiKey = await getAPIKey();
     const cfg = loadConfig();
 
-    let matched = null;
-    for (const [key, queryFn] of Object.entries(QUERY_FNS)) {
-        const accounts = cfg[key];
-        if (!Array.isArray(accounts)) {
-            continue;
-        }
-        const idx = accounts.findIndex((a) => a.apiKey && a.apiKey === apiKey);
-        if (idx >= 0) {
-            matched = { queryFn, index: idx, account: accounts[idx] };
-            break;
-        }
-    }
+    const matched = matchAccountByApiKey(cfg, apiKey);
 
     // 匹配不到账号时也查询全部账号
     if (!matched) {
@@ -105,7 +127,7 @@ async function main() {
 
     // hide 走默认 false，保留用完账号的显示；type 由查询函数回退到账号配置
     process.stdout.write(
-        await matched.queryFn({
+        await QUERY_FNS[matched.key]({
             position: matched.index,
             display,
             cache: true,
