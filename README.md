@@ -63,7 +63,8 @@ coding-plan-usage-query/
 │   │   └── query-usage-smart.mjs          # 智能查询：根据实际使用的套餐自动匹配（带缓存）
 │   ├── tools/
 │   │   ├── colorful-tokens.mjs            # 上下文 token 数按阈值着色
-│   │   ├── get-actual-model.mjs           # 获取真实模型名称
+│   │   ├── get-actual-model-name.mjs      # 获取实际模型名称
+│   │   ├── get-actual-provider-name.mjs   # 获取实际供应商名称
 │   │   └── preview.mjs                    # 生成模拟用量预览输出
 │   └── utils/
 │       ├── utils-cc-switch.mjs            # CC-Switch 工具
@@ -259,7 +260,7 @@ node src/tools/preview.mjs
 
 `query-usage-smart.mjs` 的工作流程：
 
-1. 读取 `~/.cc-switch/settings.json` 的 `currentProviderClaude` 获取当前供应商
+1. 优先读取 [CC Launcher](#相关项目) 注入的 `CC_SWITCH_PROVIDER_ID` 环境变量反查数据库获取实际供应商，查无此行或数据库读取失败时降级到 `~/.cc-switch/settings.json` 的 `currentProviderClaude`
 2. 获取当前供应商的 API Key（优先环境变量 `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`，代理模式回退查询 `~/.cc-switch/cc-switch.db`）
 3. 在 `config.json` 中匹配 `apiKey` 字段相同的账号
 4. 进程内调用对应查询函数获取用量
@@ -281,14 +282,10 @@ node F:/xxx/query-usage-smart.mjs
 - 建议将自定义命令超时设为大于脚本内部超时（10 秒），否则状态栏会出现显示错误
 - 如需显示彩色百分比，请在 ccstatusline / ccstatusline-zh 中将自定义命令设置为保留颜色
 
-## 更新日志
-
-[CHANGELOG](docs/CHANGELOG.md)
+## [更新日志](docs/CHANGELOG.md)
 
 ## 相关项目
 
 - **CC Launcher**（[Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)）：使用指定的 CC-Switch 供应商启动 Claude Code，可同时运行多个不同供应商的 Claude Code 实例，不影响 CC-Switch 的全局激活状态。
 
-## License
-
-[MIT License](LICENSE)
+## [MIT License](LICENSE)

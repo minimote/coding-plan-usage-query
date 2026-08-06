@@ -46,41 +46,37 @@ test("parseDurationString: 无法识别返回 0", () => {
 // #region parseUsageWindows ----------------
 
 /**
- * 构造模拟 ollama.com/settings 的 SSR HTML 片段
+ * 构造模拟 ollama.com/settings 的 SSR HTML 片段（local-time 在各自窗口块内）
  *
  * @param {object} opts
- * @param {{pct: number, reset: string} | null} [opts.session]
- * @param {{pct: number, reset: string} | null} [opts.weekly]
- * @param {string[]} [opts.resetTimes] local-time 元素的 data-time ISO 时间戳，按 session/weekly 顺序
+ * @param {{pct: number, reset: string, time?: string} | null} [opts.session] session 窗口；time 为块内 local-time 的 data-time
+ * @param {{pct: number, reset: string, time?: string} | null} [opts.weekly] weekly 窗口；time 为块内 local-time 的 data-time
  * @returns {string}
  */
-function makeHtml({ session, weekly, resetTimes = [] }) {
-    const blocks = [];
-    if (session) {
-        blocks.push(
-            `<section><h2>Session usage</h2><p>${session.pct}% used</p><p>Resets in ${session.reset}.</p></section>`,
+function makeHtml({ session, weekly }) {
+    const block = (title, data) => {
+        if (!data) {
+            return "";
+        }
+        // 贴近真实结构：窗口标题 + 用量百分比 + 块内 local-time div（data-time 为 ISO 时间戳）
+        const timeAttr = data.time ? ` data-time="${data.time}"` : "";
+        return (
+            `<div><h2>${title}</h2><p>${data.pct}% used</p>` +
+            `<div class="text-xs text-neutral-500 mt-1 local-time"${timeAttr}>` +
+            `Resets in ${data.reset}.</div></div>`
         );
-    }
-    if (weekly) {
-        blocks.push(
-            `<section><h2>Weekly usage</h2><p>${weekly.pct}% used</p><p>Resets in ${weekly.reset}.</p></section>`,
-        );
-    }
-    const timeEls = resetTimes
-        .map((t) => `<time class="local-time" data-time="${t}">x</time>`)
-        .join("");
-    return `<html><body>${blocks.join("")}${timeEls}</body></html>`;
+    };
+    return (
+        `<html><body>${block("Session usage", session)}` +
+        `${block("Weekly usage", weekly)}</body></html>`
+    );
 }
 
 test("parseUsageWindows: 两窗口齐全，data-time 优先于文本时长", () => {
     const now = Date.parse("2026-07-27T10:00:00Z");
     const html = makeHtml({
-        session: { pct: 12.5, reset: "4 hours" },
-        weekly: { pct: 45, reset: "6 days" },
-        resetTimes: [
-            "2026-07-27T14:00:00Z", // session 4h 后
-            "2026-08-02T10:00:00Z", // weekly 6d 后
-        ],
+        session: { pct: 12.5, reset: "4 hours", time: "2026-07-27T14:00:00Z" },
+        weekly: { pct: 45, reset: "6 days", time: "2026-08-02T10:00:00Z" },
     });
     const usage = parseUsageWindows(html, now);
     assert.equal(usage.rolling.pct, 12.5);
@@ -101,23 +97,33 @@ test("parseUsageWindows: 无 data-time 时回退到文本时长解析", () => {
     assert.equal(usage.weekly.sec, 2 * 86400);
 });
 
+test("parseUsageWindows: reset 文本无法识别时 sec 为 null（↻ --）", () => {
+    // 无 data-time 且 "Resets in" 后是无法识别的文本（如本地化/模糊措辞）：
+    // parseDurationString 返回 0 视为无效，归 null，不再误显「0 分钟」
+    const html = makeHtml({
+        session: { pct: 30, reset: "a while" },
+    });
+    const usage = parseUsageWindows(html, Date.now());
+    assert.equal(usage.rolling.pct, 30);
+    assert.equal(usage.rolling.sec, null);
+});
+
 test("parseUsageWindows: data-time 非法时回退到文本时长", () => {
     const html = makeHtml({
-        session: { pct: 10, reset: "4 hours" },
-        resetTimes: ["not-a-date"],
+        session: { pct: 10, reset: "4 hours", time: "not-a-date" },
     });
     const usage = parseUsageWindows(html, Date.now());
     assert.equal(usage.rolling.sec, 4 * 3600);
 });
 
-test("parseUsageWindows: data-time 已过期 sec 钳制为 0", () => {
+test("parseUsageWindows: data-time 已过期 sec 为负数，不钳 0", () => {
     const now = Date.parse("2026-07-27T10:00:00Z");
     const html = makeHtml({
-        session: { pct: 10, reset: "4 hours" },
-        resetTimes: ["2026-07-27T08:00:00Z"], // 2h 前
+        session: { pct: 10, reset: "4 hours", time: "2026-07-27T08:00:00Z" }, // 2h 前
     });
     const usage = parseUsageWindows(html, now);
-    assert.equal(usage.rolling.sec, 0);
+    // 原样透传负数，由 renderWindows 显示 ↻ --
+    assert.equal(usage.rolling.sec, -2 * 3600);
 });
 
 test("parseUsageWindows: 只有 session 时 weekly 为 null", () => {
@@ -129,11 +135,61 @@ test("parseUsageWindows: 只有 session 时 weekly 为 null", () => {
     assert.equal(usage.weekly, null);
 });
 
+test("parseUsageWindows: 窗口区间外的其他 local-time 不干扰关联", () => {
+    const now = Date.parse("2026-07-27T10:00:00Z");
+    // 窗口块前插入干扰 local-time（模拟注册时间等），不应影响各窗口取自己块内的 data-time
+    const html =
+        `<html><body>` +
+        `<div class="text-xs text-neutral-500 mt-1 local-time" ` +
+        `data-time="2026-07-01T00:00:00Z">Account created</div>` +
+        makeHtml({
+            session: {
+                pct: 12.5,
+                reset: "4 hours",
+                time: "2026-07-27T14:00:00Z",
+            },
+            weekly: {
+                pct: 45,
+                reset: "6 days",
+                time: "2026-08-02T10:00:00Z",
+            },
+        }) +
+        `</body></html>`;
+    const usage = parseUsageWindows(html, now);
+    assert.equal(usage.rolling.sec, 4 * 3600);
+    assert.equal(usage.weekly.sec, 6 * 86400);
+});
+
+test("parseUsageWindows: 重置文本措辞变化不影响百分比解析（解耦）", () => {
+    // "Resets in" 被改成别的措辞（模拟上游改版）：百分比仍应解析出，倒计时仍来自 data-time
+    const html =
+        `<html><body>` +
+        `<div><h2>Session usage</h2><p>12.5% used</p>` +
+        `<div class="text-xs text-neutral-500 mt-1 local-time" ` +
+        `data-time="2026-07-27T14:00:00Z">Next reset at 14:00</div>` +
+        `</div></body></html>`;
+    const now = Date.parse("2026-07-27T10:00:00Z");
+    const usage = parseUsageWindows(html, now);
+    assert.equal(usage.rolling.pct, 12.5);
+    assert.equal(usage.rolling.sec, 4 * 3600);
+});
+
 test("parseUsageWindows: 无用量数据时两窗口均 null", () => {
     const html = "<html><body>no usage data</body></html>";
     const usage = parseUsageWindows(html, Date.now());
     assert.equal(usage.rolling, null);
     assert.equal(usage.weekly, null);
+});
+
+test("parseUsageWindows: 标题大小写变体仍能解析", () => {
+    // 标题定位用大小写不敏感搜索（与正则 /i 一致），避免 "SESSION USAGE" 等变体整窗丢数据
+    const now = Date.parse("2026-07-27T10:00:00Z");
+    const html = makeHtml({
+        session: { pct: 12.5, reset: "4 hours", time: "2026-07-27T14:00:00Z" },
+    }).replace("Session usage", "SESSION USAGE");
+    const usage = parseUsageWindows(html, now);
+    assert.equal(usage.rolling.pct, 12.5);
+    assert.equal(usage.rolling.sec, 4 * 3600);
 });
 
 // #endregion parseUsageWindows --------------------------------

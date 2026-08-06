@@ -59,7 +59,7 @@ test("parseUsageResponse: 单字段缺失返回 null，另一窗口正常解析"
     assert.equal("monthly" in usage, false);
 });
 
-test("parseUsageResponse: 重置时间已过则 sec 钳制为 0", () => {
+test("parseUsageResponse: 重置时间已过 / 无重置（0）则 sec 为负数，不钳 0", () => {
     const usage = parseUsageResponse(
         {
             per5HourPercentage: 0.5,
@@ -69,6 +69,21 @@ test("parseUsageResponse: 重置时间已过则 sec 钳制为 0", () => {
         },
         1000,
     );
-    assert.equal(usage.rolling.sec, 0);
-    assert.equal(usage.weekly.sec, 0);
+    // 原样透传负数，由 renderWindows 显示 ↻ --，不再显示「0 分钟后重置」
+    assert.equal(usage.rolling.sec, -1);
+    assert.equal(usage.weekly.sec, -1);
+});
+
+test("parseUsageResponse: 重置时间缺失（undefined / 非数字）→ sec null，由渲染层显示 ↻ --", () => {
+    const usage = parseUsageResponse(
+        {
+            per5HourPercentage: 0.5,
+            per5HourResetTime: undefined,
+            per1WeekPercentage: 0.2,
+            per1WeekResetTime: "not-a-time",
+        },
+        1000,
+    );
+    assert.equal(usage.rolling.sec, null);
+    assert.equal(usage.weekly.sec, null);
 });

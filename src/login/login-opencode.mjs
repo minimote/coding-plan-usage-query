@@ -25,7 +25,7 @@ const KEY = "opencode";
  * 登录流程：开浏览器 -> 用户登录（auth cookie 出现）-> 用户进入目标 workspace -> 提取 workspaceID
  *
  * @param {number} [position=0] OpenCode 账号在 config.opencode 数组中的位置
- * @returns {Promise<{authCookie: string, workspaceID: string}>} 凭据
+ * @returns {Promise<{authCookie: string, workspaceID: string} | null>} 凭据；用户取消登录时返回 null
  */
 export async function doLogin(position = 0) {
     return runLogin({

@@ -1,5 +1,43 @@
 # 更新日志
 
+## v2.7.0-2026.08.06
+
+### 新增
+
+- 实际供应商名称工具 `src/tools/get-actual-provider-name.mjs`：作为 ccstatusline / ccstatusline-zh 自定义命令，输出当前实际使用的 CC-Switch 供应商名。获取不到套餐账号（如免费模型）或供应商名以 `free-` 开头时输出（已剥 `free-` 前缀）；匹配到套餐账号且名字无前缀时不输出（用量行前缀已含供应商信息）。`matchProviderAccount` 与 `getActualProviderName` 并发执行，前者失败（如 config 缺失）视为获取不到套餐，整体异常静默不输出
+- cc-launcher 集成：`utils-cc-switch.mjs` 识别 cc-launcher 启动时注入的 `CC_SWITCH_PROVIDER_ID` 环境变量，直接反查数据库精确锁定实际启动的供应商，可区分 base_url 与 token 均相同的同 key 供应商；该 id 在数据库中查无此行或 db 读失败（短暂锁 / 损坏）时降级到全局激活供应商 `currentProviderClaude`，与「查无此行」一致——抛错也降级，避免 launcherId 侧瞬态故障直接失败。`getAPIKey` 与 `getActualProviderName` 共用新增的 `getCurrentProviderRow`，保证两条链路供应商判定一致
+- `matchProviderAccount`（`utils-query-usage.mjs`）：拿 CC-Switch 当前供应商的 API Key 在 config 中匹配账号，未传 config 时内部 `loadConfig`；apiKey 有效但匹配不到账号返回 null；config 读取或 `getAPIKey` 异常（CC-Switch 配置损坏 / db 不可读 / 供应商未配 key 等真实配置故障）直接抛出由调用方诊断——这些不是「匹配不到」，不应静默降级
+- `escapeRegExp`（`utils-query-usage.mjs`）：转义正则特殊字符的工具函数，把任意字符串作为字面量拼进 RegExp，opencode-go 与 get-actual-model-name 共用
+- `friendlyError`（`utils-query-usage.mjs`）：把常见异常转为中文友好提示，只认客户端 `AbortSignal.timeout` 触发的超时（`DOMException` name=`TimeoutError`），不靠消息文本匹配，避免把上游错误消息中含 "timeout" 字样的业务错误误判为请求超时；其余原样透传不掩盖真实错误
+- `LIGHT_GRAY` 颜色常量（#B0B0B0，白与灰的平均）：倒计时着色专用
+- 单元测试：新增 `get-actual-model-name.test.mjs`（直连 / 路由 / 解析失败 / 输入为空）、`get-actual-model-name-routed.test.mjs`（路由 tier 匹配、多词下划线归一、正则特殊字符转义、`[xxx]` 后缀提取）、`get-actual-provider-name.test.mjs`（`resolveProviderDisplay` 的 free- 前缀 / 匹配与否组合）、`query-usage-cookie-expired.test.mjs`（各平台 cookie 过期错误提示）、`utils-cc-switch-getactualprovider.test.mjs`（`getActualProviderName` 的 launcherId 优先 / 降级 / db 失败）、`utils-cc-switch-getapikey-provider.test.mjs`（`getAPIKey` 走 `getCurrentProviderRow` 链路）；`cache` / `query-usage-negative-cache` / `query-usage-ollama` / `query-usage-smart` / `utils-query-usage` 等既有测试随改动扩充
+
+### 变更
+
+- `get-actual-model.mjs` 拆分重命名为 `get-actual-model-name.mjs`（导出 `getActualModelName`），并新增配套的 `get-actual-provider-name.mjs`；README / README_EN 项目结构同步更新
+- 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display_name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符 `[-_\s]`，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp` 转义，避免 `.` 通配任意字符误匹配、不平衡括号抛 `SyntaxError` 使 smart 整体崩溃；`[xxx]` 后缀提取改为只取末尾单个括号组 `/\[[^\]]*\]$/`，避免贪心吞掉靠前括号
+- `query-usage-smart.mjs` 重构：免费模型判断抽出纯函数 `isFreeModelName(raw)` 供单测；`matchAccountByApiKey` 从 smart 迁移到 `utils-query-usage.mjs`（按 `KEYS` 顺序遍历）并由 `matchProviderAccount` 包装（内部调 `getAPIKey`）；config 只读一次全程复用——`queryAllFallback` 与命中账号的子查询均通过 `_config` 透传已读的 cfg，避免每个账号重复 `loadConfig`
+- 倒计时渲染统一处理缺失 / 负数：`renderWindows` 中 null / NaN / Infinity / 负数 / 非数字秒数一律显示 `↻ --`，负数表示「重置时间已过或不可用」不再被钳成 0 分钟误导；`toCountdown` 增加脏数据防御，非有限数字归零；`readCache` 倒计时扣除时 null 保持 null、不再钳 0；ark / qwen / ollama / opencode-go 各查询脚本 `sec` 缺失改 null、负数原样透传，统一交给渲染层显示
+- 倒计时颜色由白（#E0E0E0）改为浅灰（#B0B0B0），与窗口标签区分又不至于抢过数据焦点
+- `writeCache`：缓存文件若被写成了数组（`typeof === "object"` 会漏过 null / 非对象校验，给数组设命名属性后 `JSON.stringify` 丢弃，条目静默不落地），一并重置为 `{}`，避免条目丢失
+- 缓存 / settings 路径支持环境变量重定向：`CC_USAGE_CACHE_PATH`（缓存文件）、`CC_SWITCH_SETTINGS_PATH`（CC-Switch settings.json）、`CC_CLAUDE_SETTINGS_PATH`（Claude settings.json），便于测试注入临时文件，不触碰真实 `~/.cc-switch` 与 `~/.claude`
+- `query-usage-ark.mjs` `uriEncode` 改按 UTF-8 字节序列逐字节百分号编码（原按 UTF-16 码元把整个非 ASCII 字符当数字编码，不符合 RFC 3986，中文等字符为非法编码）
+- `query-usage-ark.mjs` 账号 type 经 `normalizeType` 归一：配置写 `Agent` / `Coding` 等大小写形式不再被静默回退到 coding；type 同时用于错误标签选择与负缓存键（原 `effType` 仅用于负缓存键），声明提到 try 外，catch 写负缓存时按当前已解析的 type 落键
+- `query-usage-ollama.mjs` `parseUsageWindows` 重写：从窗口标题位置向后切片取该窗口第一个 `local-time` 的 `data-time` 与 `Resets in` 文本，不依赖块容器配平（真实页面标题在 `<span>` 内、外层块容器嵌套深，按 `<div>` 配平会取到内层布局 div 而漏掉 local-time），也不依赖全局出现顺序（避免窗口顺序变化干扰）；每窗口只定位标题一次、切片一次，对同一段连跑三个正则，避免重复全量扫描；移除 `htmlToText`。移除 cookie 过期登录关键词检测（HTTP 200 + 页面出现 login / sign in 等字样即判过期）——改由后续鉴权 / 解析逻辑判定，避免正常页面文本误判
+- `query-usage-opencode-go.mjs`：`getWindowObject` / `getFieldValue` 改用 `escapeRegExp`；「未找到用量数据」错误提示同时排查 workspace_id 与 cookie 过期（增加运行 `login-opencode.cmd` 重新登录引导）
+- 各查询脚本错误渲染统一经 `friendlyError` 转换（ark / ollama / opencode-go / qwen），超时统一显示「请求超时（超过 10s），请稍后重试」
+- `parseArgs`：`--hide-on-monthly-exhausted` / `--hide-on-no-active-plan` 取值比较改 `toLowerCase()` 容错（原 `=== "true"` 对 `True` 等大小写变体判 false）
+- `utils-login.mjs`：`resolvePosition` 增加 `>= 0` 下界校验（原仅校验上界，传负数被错误接受）；浏览器初始加载阶段（`newPage` / `goto`）被关闭时归一化为「浏览器被关闭」异常供 `runLogin` 重试判断（原 Playwright 英文错误匹配不上中文正则，直接英文报错且不重试）；`isBrowserClosedError` 提取为复用判定
+- `login-qwen.mjs` / `login-opencode.mjs` JSDoc 补充用户取消登录时返回 `undefined` / `null` 的契约说明
+
+### 修复
+
+- `query-usage-ark.mjs` `uriEncode` 对非 ASCII 字符（如中文）产生非法百分号编码：原把整个 UTF-16 码元当数字编码，现按 UTF-8 字节序列逐字节编码，符合 RFC 3986
+- 路由模式下多词 tier（如 `SONNET_4`）匹配不到 display_name（如 `claude-sonnet-4`）而静默回退到更短通配 tier，导致真实模型名反推错误；tier 名含 `.` `(` `)` 等正则特殊字符时误匹配或抛 `SyntaxError` 使 smart 整体崩溃
+- 倒计时为负（重置时间已过）或缺失时显示「0 分钟后重置」误导用户，现统一显示 `↻ --`
+- `writeCache` 在缓存文件被外部写成数组时新条目静默丢失（`typeof [] === "object"` 漏过校验，`JSON.stringify` 丢弃数组上的命名属性）
+- `utils-login.mjs` `resolvePosition` 传入负数 position 被错误接受，现增加 `>= 0` 下界
+
 ## v2.6.0-2026.08.05
 
 ### 新增

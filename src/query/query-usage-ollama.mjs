@@ -25,6 +25,7 @@ import {
     DEFAULT_LABELS,
     renderWindows,
     renderErrorLine,
+    friendlyError,
     loadConfig,
     resolvePrefixes,
     findAccount,
@@ -47,25 +48,6 @@ const UA =
 // #endregion 配置常量 --------------------------------
 
 // #region 解析工具 ----------------
-
-/**
- * HTML 转纯文本（去标签、解实体、压空白）
- *
- * ollama settings 页面用量数据为 SSR 渲染的可见文本，无内嵌 JS 对象，
- * 故先转纯文本再用正则匹配
- */
-function htmlToText(html) {
-    return html
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/<[^>]+>/g, "\n")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&#39;/g, "'")
-        .replace(/[ \t]+/g, " ")
-        .replace(/\n\s*\n/g, "\n")
-        .trim();
-}
 
 /**
  * 把 "4 hours." / "6 days." / "3 hours 12 minutes" 等英文时长文本转为秒数
@@ -93,6 +75,11 @@ export function parseDurationString(s) {
  * 百分比从可见文本抓取；重置时间优先取 local-time 元素的 data-time 精确时间戳，
  * 解析失败时回退到 "Resets in X hours" 文本时长
  *
+ * 从窗口标题向后取该窗口数据：标题后第一个 local-time 的 data-time 为精确重置时间，
+ * 标题后第一个 "Resets in" 文本为兜底时长。不依赖块容器配平（真实页面标题在 <span>
+ * 内、外层块容器嵌套深，按 <div> 配平会取到内层布局 div 而漏掉 local-time），
+ * 也不依赖全局出现顺序（避免窗口顺序变化干扰）
+ *
  * @param {string} html settings 页面 HTML
  * @param {number} [now=Date.now()] 当前时间戳，用于计算倒计时
  * @returns {{
@@ -101,40 +88,51 @@ export function parseDurationString(s) {
  * }}
  */
 export function parseUsageWindows(html, now = Date.now()) {
-    const text = htmlToText(html);
-
-    const sessionMatch = text.match(
-        /Session usage\s*\n\s*([\d.]+)%\s*used\s*\n\s*Resets in\s*([^\n]+)/i,
-    );
-    const weeklyMatch = text.match(
-        /Weekly usage\s*\n\s*([\d.]+)%\s*used\s*\n\s*Resets in\s*([^\n]+)/i,
-    );
-
-    // local-time 元素的 data-time 精确时间戳（ISO 8601），按出现顺序：session, weekly
-    const resetTimes = [
-        ...html.matchAll(
-            /class="[^"]*local-time[^"]*"\s+data-time="([^"]+)"/gi,
-        ),
-    ].map((m) => Date.parse(m[1]));
-
-    const toWindow = (match, resetMs) => {
-        if (!match) {
+    // 从标题位置向后取该窗口的第一个匹配：local-time 的 data-time 与 "Resets in"
+    // 都在标题所在块内、且是该标题后第一个，故无需块容器配平即可正确归属。
+    // 标题定位用大小写不敏感搜索，与下方正则的 /i 一致，避免标题大小写变体时整窗丢数据。
+    // 每窗口只定位标题一次、切片一次，对同一段连跑三个正则，避免重复全量扫描
+    const parseWindow = (title) => {
+        const idx = html.search(new RegExp(title, "i"));
+        if (idx < 0) {
             return null;
         }
-        // 优先 data-time 精确时间戳，回退到文本时长解析
-        const sec =
-            resetMs != null && Number.isFinite(resetMs)
-                ? Math.max(0, Math.round((resetMs - now) / 1000))
-                : parseDurationString(match[2]);
-        return {
-            pct: parseFloat(match[1]),
-            sec,
-        };
+        const rest = html.slice(idx);
+        const pct = rest.match(/([\d.]+)%\s*used/i)?.[1];
+        if (pct === undefined) {
+            return null;
+        }
+        const timeMatch = rest.match(
+            /class="[^"]*local-time[^"]*"\s+data-time="([^"]+)"/i,
+        );
+        const resetMs = timeMatch ? Date.parse(timeMatch[1]) : null;
+        const reset = rest.match(/Resets in\s*([^\n<]+)/i)?.[1];
+        return { pct, reset, resetMs };
+    };
+
+    const toWindow = (w) => {
+        if (w === null) {
+            return null;
+        }
+        // 优先 data-time 精确时间戳，回退到文本时长解析；两者皆无效则无倒计时（null → ↻ --）
+        // 负数（重置已过）原样透传，由 renderWindows 统一显示 ↻ --，不再钳成 0 分钟
+        let sec;
+        if (w.resetMs != null && Number.isFinite(w.resetMs)) {
+            sec = Math.round((w.resetMs - now) / 1000);
+        } else if (w.reset !== undefined) {
+            // parseDurationString 对无法识别文本返回 0，视为无效（0 秒倒计时也无意义），
+            // 归 null → ↻ --，与「两者皆无效则无倒计时」契约一致
+            const parsed = parseDurationString(w.reset);
+            sec = parsed > 0 ? parsed : null;
+        } else {
+            sec = null;
+        }
+        return { pct: parseFloat(w.pct), sec };
     };
 
     return {
-        rolling: toWindow(sessionMatch, resetTimes[0]),
-        weekly: toWindow(weeklyMatch, resetTimes[1]),
+        rolling: toWindow(parseWindow("Session usage")),
+        weekly: toWindow(parseWindow("Weekly usage")),
     };
 }
 
@@ -190,13 +188,6 @@ async function fetchUsage(sessionCookie) {
     }
 
     const html = await resp.text();
-
-    // cookie 过期但 HTTP 仍 200 时，页面会出现登录关键词
-    if (/\/login|sign\s*in|auth\/authorize|log\s*into/i.test(html)) {
-        throw new Error(
-            "cookie 已过期或无效，请从浏览器重新获取 __Secure-session",
-        );
-    }
 
     const usage = parseUsageWindows(html);
     const planType = parsePlanType(html);
@@ -258,7 +249,7 @@ export async function queryUsage(options = {}) {
         }
         return renderWindows(result.usage, display, prefixes);
     } catch (err) {
-        const output = renderErrorLine(prefixes, display, err.message);
+        const output = renderErrorLine(prefixes, display, friendlyError(err));
         if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}`, { output });
         }

@@ -104,6 +104,13 @@ test("uriEncode: 保留字符与空格百分号编码（大写 hex）", () => {
     assert.equal(uriEncode("a b=c&d"), "a%20b%3Dc%26d");
 });
 
+test("uriEncode: 非 ASCII 字符按 UTF-8 字节序列编码", () => {
+    // "火" 的 UTF-8 字节为 E7 81 AB；修复前错误输出 %706B（把 UTF-16 码元当数字）
+    assert.equal(uriEncode("火"), "%E7%81%AB");
+    // BMP 外字符（emoji 代理对）也按 UTF-8 字节编码，不再产生 surrogate 乱码
+    assert.equal(uriEncode("😀"), "%F0%9F%98%80");
+});
+
 test("buildCanonicalQuery: 参数按 key 字母序拼接", () => {
     assert.equal(
         buildCanonicalQuery("GetCodingPlanUsage"),

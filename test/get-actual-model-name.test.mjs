@@ -1,16 +1,16 @@
 /**
- * @file get-actual-model 单元测试
+ * @file get-actual-model-name 单元测试
  *
  * matchRoutedModel 为抽出的纯函数，覆盖路由模式的 tier 匹配逻辑；
- * getActualModel 的输入解析与直连模式路径不依赖 settings.json 内容，可确定性测试
+ * getActualModelName 的输入解析与直连模式路径不依赖 settings.json 内容，可确定性测试
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-    getActualModel,
+    getActualModelName,
     matchRoutedModel,
-} from "../src/tools/get-actual-model.mjs";
+} from "../src/tools/get-actual-model-name.mjs";
 
 // #region matchRoutedModel ----------------
 
@@ -30,6 +30,15 @@ test("matchRoutedModel: 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME", () => {
     assert.equal(matchRoutedModel("Claude Opus 4", env), "glm-opus[1M]");
 });
 
+test("matchRoutedModel: 后缀只取末尾单个括号组，不贪心吞掉靠前括号", () => {
+    const env = {
+        ANTHROPIC_DEFAULT_OPUS_MODEL_NAME: "glm-opus",
+        // MODEL 含靠前括号：修复前 [.*]$ 贪心会把 "[beta]-latest[1M]" 整体当后缀
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "glm[beta]-latest[1M]",
+    };
+    assert.equal(matchRoutedModel("Claude Opus 4", env), "glm-opus[1M]");
+});
+
 test("matchRoutedModel: 多个 tier 命中时取 name 更长（更具体）者", () => {
     const env = {
         // 故意先定义短名，验证确实靠长度降序排序而非插入顺序
@@ -38,11 +47,12 @@ test("matchRoutedModel: 多个 tier 命中时取 name 更长（更具体）者",
         ANTHROPIC_DEFAULT_SONNET_4_MODEL_NAME: "sonnet4-name",
         ANTHROPIC_DEFAULT_SONNET_4_MODEL: "sonnet4-model",
     };
-    // display 同时含 "sonnet" 与 "sonnet_4"，应取更长的 SONNET_4
+    // display 同时含 "sonnet" 与 "sonnet-4"，应取更长的 SONNET_4（真实显示名用连字符 / 空格）
     assert.equal(
-        matchRoutedModel("claude-sonnet_4-20250514", env),
+        matchRoutedModel("claude-sonnet-4-20250514", env),
         "sonnet4-name",
     );
+    assert.equal(matchRoutedModel("Claude Sonnet 4", env), "sonnet4-name");
 });
 
 test("matchRoutedModel: 无 tier 命中返回 null", () => {
@@ -75,35 +85,35 @@ test("matchRoutedModel: env 为空对象返回 null", () => {
 
 // #endregion matchRoutedModel --------------------------------
 
-// #region getActualModel 输入解析 ----------------
+// #region getActualModelName 输入解析 ----------------
 
-test("getActualModel: 空输入返回 输入为空", () => {
-    assert.equal(getActualModel(""), "输入为空");
+test("getActualModelName: 空输入返回 输入为空", () => {
+    assert.equal(getActualModelName(""), "输入为空");
 });
 
-test("getActualModel: 非法 JSON 返回 JSON 解析失败", () => {
-    assert.equal(getActualModel("{not json"), "JSON 解析失败");
+test("getActualModelName: 非法 JSON 返回 JSON 解析失败", () => {
+    assert.equal(getActualModelName("{not json"), "JSON 解析失败");
 });
 
-test("getActualModel: 缺少或空白 display_name 返回 未找到模型名", () => {
-    assert.equal(getActualModel(JSON.stringify({ model: {} })), "未找到模型名");
+test("getActualModelName: 缺少或空白 display_name 返回 未找到模型名", () => {
+    assert.equal(getActualModelName(JSON.stringify({ model: {} })), "未找到模型名");
     assert.equal(
-        getActualModel(JSON.stringify({ model: { display_name: "  " } })),
+        getActualModelName(JSON.stringify({ model: { display_name: "  " } })),
         "未找到模型名",
     );
 });
 
-// #endregion getActualModel 输入解析 --------------------------------
+// #endregion getActualModelName 输入解析 --------------------------------
 
-// #region getActualModel 直连模式 ----------------
+// #region getActualModelName 直连模式 ----------------
 
-test("getActualModel: 非本地 baseUrl 走直连模式返回 display_name", () => {
+test("getActualModelName: 非本地 baseUrl 走直连模式返回 display_name", () => {
     // 环境变量优先于 settings.json，强制非本地 baseUrl 即直连，不依赖真实配置内容
     const prev = process.env.ANTHROPIC_BASE_URL;
     process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com";
     try {
         const raw = JSON.stringify({ model: { display_name: "Claude Opus 4" } });
-        assert.equal(getActualModel(raw), "Claude Opus 4");
+        assert.equal(getActualModelName(raw), "Claude Opus 4");
     } finally {
         if (prev === undefined) {
             delete process.env.ANTHROPIC_BASE_URL;
@@ -113,4 +123,4 @@ test("getActualModel: 非本地 baseUrl 走直连模式返回 display_name", () 
     }
 });
 
-// #endregion getActualModel 直连模式 --------------------------------
+// #endregion getActualModelName 直连模式 --------------------------------

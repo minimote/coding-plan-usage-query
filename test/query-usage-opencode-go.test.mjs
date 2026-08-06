@@ -57,10 +57,10 @@ test("parseUsageWindows: 缺少 usagePercent 的窗口为 null", () => {
     assert.ok(usage.weekly);
 });
 
-test("parseUsageWindows: resetInSec 缺失按 0 处理", () => {
+test("parseUsageWindows: resetInSec 缺失返回 null（由渲染层显示 ↻ --）", () => {
     const html = `<script>rollingUsage:$R[1]={usagePercent:10};</script>`;
     const usage = parseUsageWindows(html);
-    assert.equal(usage.rolling.sec, 0);
+    assert.equal(usage.rolling.sec, null);
 });
 
 test("parseUsageWindows: 页面无用量数据时三窗口全 null", () => {

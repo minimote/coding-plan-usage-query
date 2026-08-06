@@ -19,10 +19,12 @@
 import {
     DISPLAY,
     TYPE,
+    normalizeType,
     KEYS,
     NO_ACTIVE_PLAN,
     renderWindows,
     renderErrorLine,
+    friendlyError,
     loadConfig,
     resolvePrefixes,
     DEFAULT_LABELS,
@@ -73,20 +75,22 @@ function sha256Hex(data) {
  */
 export function uriEncode(input) {
     let out = "";
-    for (let i = 0; i < input.length; i++) {
-        const ch = input.charCodeAt(i);
+    // 按 UTF-8 字节序列编码：非 ASCII 字符（如中文）须先展开为 UTF-8 字节再逐字节百分号编码，
+    // 而非把整个 UTF-16 码元当数字编码（前者符合 RFC 3986，后者是非法编码）
+    const bytes = Buffer.from(input, "utf8");
+    for (const b of bytes) {
         if (
-            (ch >= 0x41 && ch <= 0x5a) ||
-            (ch >= 0x61 && ch <= 0x7a) ||
-            (ch >= 0x30 && ch <= 0x39) ||
-            ch === 0x2d ||
-            ch === 0x5f ||
-            ch === 0x2e ||
-            ch === 0x7e
+            (b >= 0x41 && b <= 0x5a) ||
+            (b >= 0x61 && b <= 0x7a) ||
+            (b >= 0x30 && b <= 0x39) ||
+            b === 0x2d ||
+            b === 0x5f ||
+            b === 0x2e ||
+            b === 0x7e
         ) {
-            out += input[i];
+            out += String.fromCharCode(b);
         } else {
-            out += "%" + ch.toString(16).toUpperCase().padStart(2, "0");
+            out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
         }
     }
     return out;
@@ -327,7 +331,9 @@ async function fetchUsage(ak, sk, type) {
         if (!item) {
             return null;
         }
-        let sec = 0;
+        // sec 为 null 表示无重置（见 parseCodingPlanResponse 契约）；负数（-1 / 重置时间已过）原样透传，
+        // 由 renderWindows 统一显示 ↻ --，不再钳成 0 分钟误导
+        let sec = null;
         if (item.resetTimestamp != null) {
             const ts =
                 typeof item.resetTimestamp === "number"
@@ -372,11 +378,13 @@ export async function queryUsage(options = {}) {
         cache = false,
     } = options;
 
-    // effType 仅用于负缓存键（按套餐类型区分缓存），不参与错误标签选择
-    let effType = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
+    // type 同时用于负缓存键（按套餐类型区分缓存）与错误标签选择。
+    // 调用方未指定 type 时先以 CODING 兜底，解析到账号后再覆盖；
+    // 声明在 try 外，catch 写负缓存时仍可按当前已解析的 type 落键
+    let type = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
     // 错误标签前缀：解析到账号+type 后立即用 resolvePrefixes 覆盖默认标签；
     // 仅 loadConfig/findAccount 这类早期错误在覆盖前抛出，回退到默认标签
-    let prefixes = DEFAULT_LABELS[KEY][effType];
+    let prefixes = DEFAULT_LABELS[KEY][type];
     // 是否已进入网络查询阶段：仅对此后的失败写负缓存。
     // 配置类错误（loadConfig/findAccount/缺凭据）发生在读缓存点之前，
     // 写负缓存既不会被命中，还可能在配置于 TTL 内修复后残留旧错误
@@ -386,12 +394,10 @@ export async function queryUsage(options = {}) {
         const account = findAccount(cfg[KEY], position);
 
         // 套餐类型优先级：调用方 type > 账号 type > 默认 coding
-        const type = Object.values(TYPE).includes(optType)
+        // 账号 type 经 normalizeType 归一，配置写 "Agent"/"Coding" 等大小写形式不再被静默回退到 coding
+        type = Object.values(TYPE).includes(optType)
             ? optType
-            : Object.values(TYPE).includes(account.type)
-              ? account.type
-              : TYPE.CODING;
-        effType = type;
+            : normalizeType(account.type, { fallback: TYPE.CODING });
         // 先解析前缀再校验凭据：缺凭据错误也能用对的类型/账号标签渲染
         prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
         const ak = (account.accessKeyId || "").trim();
@@ -416,9 +422,9 @@ export async function queryUsage(options = {}) {
             hideOnMonthlyExhausted,
         );
     } catch (err) {
-        const output = renderErrorLine(prefixes, display, err.message);
+        const output = renderErrorLine(prefixes, display, friendlyError(err));
         if (cache && reachedFetch) {
-            writeCache(`${KEY}:${position}:${effType}`, { output });
+            writeCache(`${KEY}:${position}:${type}`, { output });
         }
         return output;
     }

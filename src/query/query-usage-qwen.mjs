@@ -20,6 +20,7 @@ import {
     DEFAULT_LABELS,
     renderWindows,
     renderErrorLine,
+    friendlyError,
     loadConfig,
     resolvePrefixes,
     findAccount,
@@ -161,11 +162,13 @@ export function parseUsageResponse(data, now = Date.now()) {
             return null;
         }
         const resetNum = Number(reset);
+        // 不钳制：负数（重置时间已过 / 无重置如 null、空串）与 null（字段缺失）原样透传，
+        // 由 renderWindows 统一显示 ↻ --，不再显示「0 分钟后重置」
         return {
             pct: pct * 100,
             sec: Number.isFinite(resetNum)
-                ? Math.max(0, Math.round((resetNum - now) / 1000))
-                : 0,
+                ? Math.round((resetNum - now) / 1000)
+                : null,
         };
     };
     return {
@@ -235,7 +238,7 @@ export async function queryUsage(options = {}) {
             display,
             err instanceof LoginExpiredError
                 ? "cookie 失效，请运行 login-qwen.cmd 重新登录"
-                : err.message,
+                : friendlyError(err),
         );
         if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}`, { output });
