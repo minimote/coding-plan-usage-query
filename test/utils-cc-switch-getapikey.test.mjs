@@ -10,7 +10,25 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getAPIKey } from "../src/utils/utils-cc-switch.mjs";
+
+let tmpDir;
+test.before(() => {
+    // settings.json 重定向到临时文件，db 回退分支不再触碰真实 ~/.cc-switch
+    tmpDir = mkdtempSync(join(tmpdir(), "cc-switch-getapikey-"));
+    writeFileSync(
+        join(tmpDir, "settings.json"),
+        JSON.stringify({ currentProviderClaude: "test-provider" }),
+    );
+    process.env.CC_SWITCH_SETTINGS_PATH = join(tmpDir, "settings.json");
+});
+test.after(() => {
+    delete process.env.CC_SWITCH_SETTINGS_PATH;
+    rmSync(tmpDir, { recursive: true, force: true });
+});
 
 /** 备份并清理两个环境变量，返回恢复函数 */
 function withEnv(overrides) {

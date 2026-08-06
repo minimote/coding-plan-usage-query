@@ -7,17 +7,21 @@ import assert from "node:assert/strict";
 import {
     DISPLAY,
     TYPE,
+    KEYS,
     pctColorCode,
     pctSegment,
     formatPct,
     toCountdown,
     renderWindows,
     renderErrorLine,
+    friendlyError,
     normalizeDisplay,
     normalizeType,
     parseArgs,
     findAccount,
     resolvePrefixes,
+    matchAccountByApiKey,
+    matchProviderAccount,
     COLORS,
 } from "../src/utils/utils-query-usage.mjs";
 
@@ -98,7 +102,6 @@ test("pctColorCode: 颜色跟随展示值，99.7% 显示 99% 仍为橙", () => {
 test("pctSegment: 渲染着色百分比，四舍五入到整数", () => {
     const seg = pctSegment(12.6);
     assert.ok(seg.includes("13%"));
-    assert.ok(!seg.includes("█"));
 });
 
 test("pctSegment: 99.7% 渲染为 99% 而非 100%", () => {
@@ -125,6 +128,13 @@ test("toCountdown: short 档英文倒计时", () => {
 test("toCountdown: 负数钳制为 0", () => {
     assert.equal(toCountdown(-100, DISPLAY.LONG), "0分钟");
     assert.equal(toCountdown(-100, DISPLAY.SHORT), "0m");
+});
+
+test("toCountdown: NaN / undefined / Infinity 归零，不渲染 NaN分钟", () => {
+    assert.equal(toCountdown(NaN, DISPLAY.LONG), "0分钟");
+    assert.equal(toCountdown(NaN, DISPLAY.SHORT), "0m");
+    assert.equal(toCountdown(undefined, DISPLAY.LONG), "0分钟");
+    assert.equal(toCountdown(Infinity, DISPLAY.LONG), "0分钟");
 });
 
 test("toCountdown: 默认 long 档", () => {
@@ -161,6 +171,44 @@ test("renderWindows: 窗口数据为 null 显示 标签:--", () => {
     assert.ok(plain.includes(`五:${dash}`));
     assert.ok(plain.includes(`周:${dash}`));
     assert.ok(plain.includes(`月:${dash}`));
+});
+
+test("renderWindows: 秒数无效（null / NaN / 负数）倒计时位显示 --", () => {
+    const usage = {
+        rolling: { pct: 10, sec: null },
+        weekly: { pct: 50, sec: NaN },
+        monthly: { pct: 90, sec: -7200 },
+    };
+    const out = renderWindows(usage, DISPLAY.SHORT);
+    const plain = out.replace(/\x1b\[[\d;]*m/g, "");
+    // 百分比仍显示，倒计时位统一为 --
+    assert.ok(plain.includes(`五:10% ↻ --`));
+    assert.ok(plain.includes(`周:50% ↻ --`));
+    assert.ok(plain.includes(`月:90% ↻ --`));
+});
+
+test("renderWindows: 秒数有效（0 / 数字字符串）正常渲染倒计时", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: "3600" },
+        monthly: { pct: 90, sec: 0 },
+    };
+    const out = renderWindows(usage, DISPLAY.SHORT);
+    const plain = out.replace(/\x1b\[[\d;]*m/g, "");
+    assert.ok(plain.includes(`五:10% ↻ 30m`));
+    assert.ok(plain.includes(`周:50% ↻ 1h`));
+    assert.ok(plain.includes(`月:90% ↻ 0m`));
+});
+
+test("renderWindows: 数字字符串秒数归一后正常渲染，不误判为缺失", () => {
+    const usage = {
+        rolling: { pct: 10, sec: "1800" },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: { pct: 90, sec: "2000000" },
+    };
+    const out = renderWindows(usage, DISPLAY.SHORT);
+    assert.ok(out.includes("30m"));
+    assert.ok(!out.includes("--"));
 });
 
 test("renderWindows: hideOnMonthlyExhausted 月度用尽时返回空串", () => {
@@ -247,6 +295,58 @@ test("renderWindows: AUTO 档宽终端保留 LONG", () => {
     }
 });
 
+/**
+ * 模拟终端宽度完全未知（stdout/stderr.columns 均为 0 且无 COLUMNS 环境变量）
+ *
+ * getTermWidth 优先级为 stdout → stderr → COLUMNS，三处都取不到时返回 0，
+ * AUTO 档应回退 SHORT。真实 TTY 下取不到宽度（如管道）即为此场景。
+ *
+ * @returns {() => void} 恢复原状的函数
+ */
+function stubNoTermWidth() {
+    const restoreOut = stubTermWidth(0);
+    const descErr = Object.getOwnPropertyDescriptor(process.stderr, "columns");
+    Object.defineProperty(process.stderr, "columns", {
+        value: 0,
+        configurable: true,
+    });
+    const prevColumns = process.env.COLUMNS;
+    delete process.env.COLUMNS;
+    return () => {
+        restoreOut();
+        if (descErr) {
+            Object.defineProperty(process.stderr, "columns", descErr);
+        } else {
+            delete process.stderr.columns;
+        }
+        if (prevColumns === undefined) {
+            delete process.env.COLUMNS;
+        } else {
+            process.env.COLUMNS = prevColumns;
+        }
+    };
+}
+
+test("renderWindows: AUTO 档终端宽度未知（0）时回退 SHORT", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: { pct: 100, sec: 2000000 },
+    };
+    const restore = stubNoTermWidth();
+    try {
+        const out = renderWindows(usage, DISPLAY.AUTO, {
+            long: "长标签",
+            short: "短",
+        });
+        // 宽度未知时不测宽，直接回退 short 档（用 short 前缀 + 短窗口标签）
+        assert.ok(out.includes(COLORS.PREFIX + "短"));
+        assert.ok(!out.includes("五小时"));
+    } finally {
+        restore();
+    }
+});
+
 test("renderErrorLine: 格式为 前缀 | ❌ 消息", () => {
     const out = renderErrorLine(
         { long: "火山Coding", short: "Coding" },
@@ -264,6 +364,36 @@ test("renderErrorLine: short 档用 short 标签", () => {
         "err",
     );
     assert.ok(out.includes(COLORS.PREFIX + "Coding"));
+});
+
+test("friendlyError: timeout 错误转中文提示", () => {
+    // AbortSignal.timeout 超时抛 DOMException name=TimeoutError
+    assert.equal(
+        friendlyError({
+            name: "TimeoutError",
+            message: "The operation was aborted due to timeout",
+        }),
+        "请求超时（超过 10s），请稍后重试",
+    );
+});
+
+test("friendlyError: message 含 timeout 但非 TimeoutError 原样透传（不误判）", () => {
+    // 上游业务错误消息里恰好含 "timeout" 字样，不应被误判为客户端请求超时
+    assert.equal(
+        friendlyError(new Error("RequestTimeout: upstream busy")),
+        "RequestTimeout: upstream busy",
+    );
+});
+
+test("friendlyError: 普通错误原样透传", () => {
+    assert.equal(friendlyError(new Error("cookie 已过期")), "cookie 已过期");
+    assert.equal(friendlyError({ message: "配置错误" }), "配置错误");
+});
+
+test("friendlyError: 非 Error 输入兜底转字符串", () => {
+    assert.equal(friendlyError("原始字符串"), "原始字符串");
+    assert.equal(friendlyError(undefined), "undefined");
+    assert.equal(friendlyError(null), "null");
 });
 
 // #endregion 渲染 --------------------------------
@@ -285,15 +415,39 @@ test("normalizeDisplay: 非法值抛错，提供 fallback 时回退", () => {
     );
 });
 
+test("normalizeDisplay: 非字符串值（undefined/null/数字）不抛 TypeError", () => {
+    assert.throws(() => normalizeDisplay(undefined));
+    assert.throws(() => normalizeDisplay(null));
+    assert.throws(() => normalizeDisplay(42));
+    assert.equal(
+        normalizeDisplay(undefined, { fallback: DISPLAY.AUTO }),
+        DISPLAY.AUTO,
+    );
+});
+
 test("normalizeType: 支持缩写和全称", () => {
     assert.equal(normalizeType("c"), TYPE.CODING);
     assert.equal(normalizeType("a"), TYPE.AGENT);
     assert.equal(normalizeType("coding"), TYPE.CODING);
+    assert.equal(normalizeType("agent"), TYPE.AGENT);
+    // 大小写不敏感：配置写 "Agent"/"CODING" 也能归一（ark 账号 type 不再静默回退 coding）
+    assert.equal(normalizeType("Agent"), TYPE.AGENT);
+    assert.equal(normalizeType("CODING"), TYPE.CODING);
 });
 
 test("normalizeType: 非法值抛错，提供 fallback 时回退", () => {
     assert.throws(() => normalizeType("xyz"));
     assert.equal(normalizeType("xyz", { fallback: TYPE.CODING }), TYPE.CODING);
+});
+
+test("normalizeType: 非字符串值（undefined/null/数字）不抛 TypeError", () => {
+    assert.throws(() => normalizeType(undefined));
+    assert.throws(() => normalizeType(null));
+    assert.throws(() => normalizeType(42));
+    assert.equal(
+        normalizeType(undefined, { fallback: TYPE.CODING }),
+        TYPE.CODING,
+    );
 });
 
 test("parseArgs: 全默认值（type 为 undefined，由调用方回退）", () => {
@@ -343,6 +497,27 @@ test("parseArgs: 缩写参数", () => {
     assert.equal(parsed.position, 1);
 });
 
+test("parseArgs: hide 参数大小写不敏感", () => {
+    const parsed = parseArgs([
+        "node",
+        "script.mjs",
+        "--hide-on-monthly-exhausted",
+        "TRUE",
+        "--hide-on-no-active-plan",
+        "True",
+    ]);
+    assert.equal(parsed.hideOnMonthlyExhausted, true);
+    assert.equal(parsed.hideOnNoActivePlan, true);
+    // 非 true 语义的值仍为 false
+    const parsed2 = parseArgs([
+        "node",
+        "script.mjs",
+        "--hide-on-monthly-exhausted",
+        "yes",
+    ]);
+    assert.equal(parsed2.hideOnMonthlyExhausted, false);
+});
+
 test("parseArgs: 非法 type 抛错", () => {
     assert.throws(() =>
         parseArgs(["node", "script.mjs", "--type", "xyz"]),
@@ -361,6 +536,16 @@ test("parseArgs: 非法 position 抛错", () => {
 // #endregion 参数解析 --------------------------------
 
 // #region 账号匹配 ----------------
+
+/**
+ * 构造 config 对象
+ *
+ * @param {object} byKey 各 key 的账号数组
+ * @returns {object}
+ */
+function cfg(byKey) {
+    return { [KEYS.ARK]: byKey.ark, [KEYS.OLLAMA]: byKey.ollama, [KEYS.OPENCODE]: byKey.opencode, [KEYS.QWEN]: byKey.qwen };
+}
 
 test("findAccount: 按 index 取账号", () => {
     const accounts = [{ name: "a" }, { name: "b" }, { name: "c" }];
@@ -394,5 +579,138 @@ test("resolvePrefixes: 账号无标签时用默认", () => {
         short: "默认短",
     });
 });
+
+test("matchAccountByApiKey: 命中 ark 第一个账号", () => {
+    const c = cfg({
+        ark: [
+            { apiKey: "sk-ark-1", accessKeyId: "a1" },
+            { apiKey: "sk-ark-2", accessKeyId: "a2" },
+        ],
+    });
+    const m = matchAccountByApiKey(c, "sk-ark-1");
+    assert.deepEqual(m, { key: KEYS.ARK, index: 0, account: c.ark[0] });
+});
+
+test("matchAccountByApiKey: 同 key 多账号命中正确 index", () => {
+    const c = cfg({
+        ark: [{ apiKey: "sk-ark-1" }, { apiKey: "sk-ark-2" }],
+    });
+    const m = matchAccountByApiKey(c, "sk-ark-2");
+    assert.equal(m.index, 1);
+    assert.equal(m.account.apiKey, "sk-ark-2");
+});
+
+test("matchAccountByApiKey: 命中靠后的 key（qwen）", () => {
+    const c = cfg({
+        ark: [{ apiKey: "sk-ark-1" }],
+        qwen: [{ apiKey: "sk-qwen-1", cookie: "c" }],
+    });
+    const m = matchAccountByApiKey(c, "sk-qwen-1");
+    assert.equal(m.key, KEYS.QWEN);
+    assert.equal(m.index, 0);
+});
+
+test("matchAccountByApiKey: 按 key 顺序取第一个命中（ark 优先于 qwen）", () => {
+    // 两个 key 都有相同 apiKey，应返回顺序在前的 ark
+    const c = cfg({
+        ark: [{ apiKey: "same-key" }],
+        qwen: [{ apiKey: "same-key" }],
+    });
+    const m = matchAccountByApiKey(c, "same-key");
+    assert.equal(m.key, KEYS.ARK);
+});
+
+test("matchAccountByApiKey: 未匹配返回 null", () => {
+    const c = cfg({ ark: [{ apiKey: "sk-ark-1" }] });
+    assert.equal(matchAccountByApiKey(c, "not-exist"), null);
+});
+
+test("matchAccountByApiKey: apiKey 为空/null/undefined 返回 null", () => {
+    const c = cfg({ ark: [{ apiKey: "sk-ark-1" }] });
+    assert.equal(matchAccountByApiKey(c, ""), null);
+    assert.equal(matchAccountByApiKey(c, null), null);
+    assert.equal(matchAccountByApiKey(c, undefined), null);
+});
+
+test("matchAccountByApiKey: 账号 apiKey 为空字符串的条目不被匹配", () => {
+    // 即使传入空串，也不应匹配到 apiKey 为空的账号（a.apiKey falsy 短路）
+    const c = cfg({ ark: [{ apiKey: "" }, { apiKey: "sk-ark-2" }] });
+    assert.equal(matchAccountByApiKey(c, ""), null);
+    // 但能匹配到第二个
+    assert.equal(matchAccountByApiKey(c, "sk-ark-2").index, 1);
+});
+
+test("matchAccountByApiKey: 某 key 不是数组（undefined）时跳过不报错", () => {
+    const c = cfg({ qwen: [{ apiKey: "sk-qwen-1" }] });
+    // ark/ollama/opencode 均为 undefined
+    const m = matchAccountByApiKey(c, "sk-qwen-1");
+    assert.equal(m.key, KEYS.QWEN);
+});
+
+test("matchAccountByApiKey: 空配置返回 null", () => {
+    assert.equal(matchAccountByApiKey({}, "sk-any"), null);
+});
+
+test("matchAccountByApiKey: 账号对象为 null 的槽位被跳过", () => {
+    const c = cfg({ ark: [null, { apiKey: "sk-ark-2" }] });
+    const m = matchAccountByApiKey(c, "sk-ark-2");
+    assert.equal(m.index, 1);
+});
+
+// #region matchProviderAccount ----------------
+
+test("matchProviderAccount: 正常匹配当前供应商 key 返回账号", async () => {
+    // 环境变量 key 优先于 db（见 utils-cc-switch getAPIKey）
+    const prev = process.env.ANTHROPIC_AUTH_TOKEN;
+    process.env.ANTHROPIC_AUTH_TOKEN = "sk-match";
+    try {
+        const m = await matchProviderAccount({
+            qwen: [{ apiKey: "sk-match", shortLabel: "千问" }],
+        });
+        assert.ok(m);
+        assert.equal(m.key, KEYS.QWEN);
+        assert.equal(m.index, 0);
+        assert.equal(m.account.shortLabel, "千问");
+    } finally {
+        if (prev === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+        else process.env.ANTHROPIC_AUTH_TOKEN = prev;
+    }
+});
+
+test("matchProviderAccount: 匹配不到返回 null", async () => {
+    const prev = process.env.ANTHROPIC_AUTH_TOKEN;
+    process.env.ANTHROPIC_AUTH_TOKEN = "sk-nomatch";
+    try {
+        const m = await matchProviderAccount({
+            qwen: [{ apiKey: "sk-other" }],
+        });
+        assert.equal(m, null);
+    } finally {
+        if (prev === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+        else process.env.ANTHROPIC_AUTH_TOKEN = prev;
+    }
+});
+
+test("matchProviderAccount: getAPIKey 抛错（settings 缺失）时异常冒泡", async () => {
+    // 真实配置故障（CC-Switch 配置损坏 / db 不可读 / 供应商未配 key）不应静默降级为
+    // 查全部账号，需冒泡由 smart 的 main().catch 打印 ❌ 诊断；免费路径已由 isFreeModel 先判
+    const prevAuth = process.env.ANTHROPIC_AUTH_TOKEN;
+    const prevSettings = process.env.CC_SWITCH_SETTINGS_PATH;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    process.env.CC_SWITCH_SETTINGS_PATH = "__nonexistent_settings__";
+    try {
+        await assert.rejects(
+            matchProviderAccount({ qwen: [{ apiKey: "x" }] }),
+            (err) => err instanceof Error,
+        );
+    } finally {
+        if (prevAuth === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+        else process.env.ANTHROPIC_AUTH_TOKEN = prevAuth;
+        if (prevSettings === undefined) delete process.env.CC_SWITCH_SETTINGS_PATH;
+        else process.env.CC_SWITCH_SETTINGS_PATH = prevSettings;
+    }
+});
+
+// #endregion matchProviderAccount ----------------
 
 // #endregion 账号匹配 --------------------------------

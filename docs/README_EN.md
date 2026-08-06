@@ -63,7 +63,8 @@ coding-plan-usage-query/
 │   │   └── query-usage-smart.mjs          # Smart query: auto-match by current plan (with cache)
 │   ├── tools/
 │   │   ├── colorful-tokens.mjs            # Colorize context tokens by threshold
-│   │   ├── get-actual-model.mjs           # Get actual model name
+│   │   ├── get-actual-model-name.mjs      # Get actual model name
+│   │   ├── get-actual-provider-name.mjs   # Get actual provider name
 │   │   └── preview.mjs                    # Generate mock usage preview output
 │   └── utils/
 │       ├── utils-cc-switch.mjs            # CC-Switch utilities
@@ -259,7 +260,7 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 `query-usage-smart.mjs` workflow:
 
-1. Read `currentProviderClaude` from `~/.cc-switch/settings.json` to get the current provider
+1. Prioritize the `CC_SWITCH_PROVIDER_ID` env var injected by [CC Launcher](#related-projects) to look up the actual provider in the database; fall back to `currentProviderClaude` from `~/.cc-switch/settings.json` when the id is missing, not found, or the database read fails
 2. Get the current provider's API Key (prioritize env vars `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`; fall back to `~/.cc-switch/cc-switch.db` in proxy mode)
 3. Match the account with the same `apiKey` in `config.json`
 4. Call the corresponding query function in-process
@@ -281,14 +282,10 @@ node F:/xxx/query-usage-smart.mjs
 - Recommended: set the custom command timeout greater than the script's internal timeout (10 seconds), otherwise the status bar will show a display error
 - To display colored percentages, check "preserve colors" for the custom command in ccstatusline / ccstatusline-zh
 
-## Changelog
-
-[CHANGELOG](CHANGELOG.md)
+## [Changelog](CHANGELOG.md)
 
 ## Related Projects
 
 - **CC Launcher** ([Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)): Launch Claude Code with a specified CC-Switch provider; multiple instances using different providers can run simultaneously without affecting the global active state.
 
-## License
-
-[MIT License](../LICENSE)
+## [MIT License](../LICENSE)

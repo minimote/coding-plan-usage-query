@@ -21,6 +21,7 @@ import {
     NO_ACTIVE_PLAN,
     renderWindows,
     renderErrorLine,
+    friendlyError,
     loadConfig,
     resolvePrefixes,
     DEFAULT_LABELS,
@@ -30,6 +31,7 @@ import {
     writeCache,
     isMainModule,
     REQUEST_TIMEOUT_MS,
+    escapeRegExp,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -52,7 +54,7 @@ const KEY = KEYS.OPENCODE;
  */
 function getWindowObject(html, name) {
     const match = html.match(
-        name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ":\\$R\\[\\d+\\]=\\{",
+        escapeRegExp(name) + ":\\$R\\[\\d+\\]=\\{",
     );
     if (!match) {
         return null;
@@ -84,7 +86,7 @@ function getWindowObject(html, name) {
  */
 function getFieldValue(body, field) {
     const match = body.match(
-        field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*:\\s*(-?[\\d.]+)",
+        escapeRegExp(field) + "\\s*:\\s*(-?[\\d.]+)",
     );
     return match ? match[1] : null;
 }
@@ -114,7 +116,8 @@ export function parseUsageWindows(html) {
         const secRaw = getFieldValue(body, "resetInSec");
         return {
             pct: parseFloat(pctRaw),
-            sec: secRaw !== null ? parseInt(secRaw, 10) : 0,
+            // resetInSec 缺失 → null；非数字字符串 → parseInt 得 NaN，均由渲染层显示 ↻ --
+            sec: secRaw !== null ? parseInt(secRaw, 10) : null,
         };
     };
     return {
@@ -191,8 +194,10 @@ async function fetchUsage(authCookie, workspaceID) {
         if (/usagePercent/.test(html)) {
             throw new Error("页面解析失败，页面结构可能已更新");
         }
-        // 200、无鉴权、无订阅按钮、无用量数据：无法判定，给出可操作提示
-        throw new Error("未找到用量数据，请检查 workspace_id 是否正确");
+        // 200、无鉴权、无订阅按钮、无用量数据：无法判定，提示同时排查凭据与 workspace 两方面
+        throw new Error(
+            "未找到用量数据，请检查 workspace_id 是否正确；若 cookie 已过期，请运行 login-opencode.cmd 重新登录",
+        );
     }
     return usage;
 }
@@ -252,7 +257,7 @@ export async function queryUsage(options = {}) {
             hideOnMonthlyExhausted,
         );
     } catch (err) {
-        const output = renderErrorLine(prefixes, display, err.message);
+        const output = renderErrorLine(prefixes, display, friendlyError(err));
         if (cache && reachedFetch) {
             writeCache(`${KEY}:${position}`, { output });
         }

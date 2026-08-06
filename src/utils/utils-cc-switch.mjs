@@ -15,6 +15,9 @@ const DB_PATH = join(CC_SWITCH_DIR, "cc-switch.db");
 const APP_TYPE = "claude";
 const CURRENT_PROVIDER_FIELD = "currentProviderClaude";
 
+/** cc-launcher 启动时注入的供应商 id 环境变量 */
+const LAUNCHER_PROVIDER_ID_ENV = "CC_SWITCH_PROVIDER_ID";
+
 /** DatabaseSync 构造器，首次调用 openDb 时动态加载 */
 let DatabaseSync;
 
@@ -41,7 +44,9 @@ export function suppressExperimentalWarning() {
  * @returns {object} settings.json 内容
  */
 function readSettings() {
-    return JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
+    // 测试可通过 CC_SWITCH_SETTINGS_PATH 重定向到临时 settings.json，避免触碰真实 ~/.cc-switch
+    const settingsPath = process.env.CC_SWITCH_SETTINGS_PATH || SETTINGS_PATH;
+    return JSON.parse(readFileSync(settingsPath, "utf-8"));
 }
 
 /**
@@ -107,6 +112,42 @@ export async function lookupProviderInDb(id) {
 }
 
 /**
+ * 解析当前实际使用的供应商 db 行
+ *
+ * 优先 cc-launcher 注入的 CC_SWITCH_PROVIDER_ID：该 id 查无此行（null）或 db 读失败
+ * （抛错，如短暂锁/损坏）时降级到全局激活供应商 currentProviderClaude，与「查无此行」
+ * 一致——抛错也降级，避免 launcherId 侧瞬态故障时直接失败；
+ * 全局供应商查无此行返回 null，db 读失败抛错（无更 fallback）
+ *
+ * @returns {Promise<object|null>} 供应商行；全局供应商查无此行时返回 null
+ * @throws {Error} 全局供应商 db 读失败，或 getCurrentProviderId 失败时抛出
+ */
+async function getCurrentProviderRow() {
+    const launcherId = process.env[LAUNCHER_PROVIDER_ID_ENV];
+    if (launcherId) {
+        try {
+            const row = await lookupProviderInDb(launcherId);
+            if (row) {
+                return row;
+            }
+        } catch {
+            // db 读失败降级到全局，与查无此行一致
+        }
+    }
+    const id = getCurrentProviderId();
+    return lookupProviderInDb(id);
+}
+
+/**
+ * 构造「当前供应商在数据库中查无此行」的错误
+ *
+ * @returns {Error}
+ */
+function providerNotFound() {
+    return new Error(`供应商 "${getCurrentProviderId()}" 未在 CC-Switch 数据库中找到`);
+}
+
+/**
  * 获取指定供应商的 API Key
  *
  * @returns {Promise<string>} token；获取失败时抛出 Error
@@ -120,12 +161,11 @@ export async function getAPIKey() {
         return envKey;
     }
 
-    // 回退到 CC-Switch 数据库
-    // 获取当前供应商 id
-    const id = getCurrentProviderId();
-    const row = await lookupProviderInDb(id);
+    // 回退到 CC-Switch 数据库：优先 cc-launcher 注入的 CC_SWITCH_PROVIDER_ID，
+    // 与 getActualProviderName 共用 getCurrentProviderRow，保证两条链路供应商判定一致
+    const row = await getCurrentProviderRow();
     if (!row) {
-        throw new Error(`供应商 "${id}" 未在 CC-Switch 数据库中找到`);
+        throw providerNotFound();
     }
     let providerEnv;
     try {
@@ -133,11 +173,32 @@ export async function getAPIKey() {
     } catch (error) {
         throw new Error(`无法获取 API Key: ${error.message}`);
     }
-    const key = providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY;
+    const key =
+        providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY;
     if (!key) {
         throw new Error(
-            `供应商 "${id}" 的 settings_config.env 未配置 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY`,
+            `供应商 "${row.id}" 的 settings_config.env 未配置 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY`,
         );
     }
     return key;
+}
+
+/**
+ * 获取当前实际使用的供应商名称
+ *
+ * 判定优先级：
+ *   1. cc-launcher 注入的 CC_SWITCH_PROVIDER_ID 环境变量：指向实际启动的供应商 id，
+ *      可精确区分 base_url 与 token 均相同的同 key 供应商；该 id 在数据库中不存在或
+ *      db 读失败时降级到全局
+ *   2. cc-switch 全局激活供应商（settings.json 的 currentProviderClaude）
+ *
+ * @returns {Promise<string>} 供应商名称
+ * @throws {Error} 全局激活供应商缺失或数据库中查不到时
+ */
+export async function getActualProviderName() {
+    const row = await getCurrentProviderRow();
+    if (!row) {
+        throw providerNotFound();
+    }
+    return row.name;
 }

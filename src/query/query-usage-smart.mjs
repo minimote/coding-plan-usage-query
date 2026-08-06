@@ -2,7 +2,7 @@
  * @file 根据 CC-Switch 当前供应商智能路由到对应用量查询函数
  *
  * 从 CC-Switch 读取当前供应商的 API Key，在 config 中匹配账号位置，调用对应查询函数
- * 检测到免费模型或匹配不到账号时显示全部账号用量
+ * 匹配不到账号（如免费模型）时显示全部账号用量
  * 查询结果带短时缓存，减少高频刷新下的重复请求
  *
  * 用法:
@@ -18,15 +18,30 @@ import {
     parseArgs,
     isMainModule,
     ERROR_MARK,
+    matchProviderAccount,
 } from "../utils/utils-query-usage.mjs";
-import { getAPIKey } from "../utils/utils-cc-switch.mjs";
-import { getActualModel } from "../tools/get-actual-model.mjs";
 import { queryAll, QUERY_FNS } from "./query-usage-all.mjs";
+import { getActualModelName } from "../tools/get-actual-model-name.mjs";
 
 // #region 免费模型判断 ----------------
 
 /**
- * 检测当前模型名称是否包含 "free"
+ * 判断模型名是否含 "free"（忽略大小写）
+ *
+ * 纯函数，供 isFreeModel 与单测使用；raw 为 ccstatusline 传入的 JSON 字符串
+ *
+ * @param {string} raw stdin 收到的 JSON 字符串
+ * @returns {boolean}
+ */
+export function isFreeModelName(raw) {
+    if (!raw || raw.trim() === "") {
+        return false;
+    }
+    return getActualModelName(raw).toLowerCase().includes("free");
+}
+
+/**
+ * 检测当前模型名称是否包含 "free"（忽略大小写）
  *
  * @returns {boolean}
  */
@@ -42,65 +57,28 @@ function isFreeModel() {
     } catch {
         return false;
     }
-    if (!raw || raw.trim() === "") {
-        return false;
-    }
-    return getActualModel(raw).toLowerCase().includes("free");
+    return isFreeModelName(raw);
 }
 
 // #endregion 免费模型判断 --------------------------------
 
-// #region 账号匹配 ----------------
-
-/**
- * 在 config 各账号数组中按 apiKey 查找账号
- *
- * 按 QUERY_FNS 的 key 顺序遍历，命中第一个含该 apiKey 的账号即返回；
- * apiKey 为空或所有账号均不匹配时返回 null。纯函数，便于单测
- *
- * @param {object} cfg loadConfig() 的结果
- * @param {string} apiKey 待匹配的 API Key
- * @returns {{ key: string, index: number, account: object } | null}
- */
-export function matchAccountByApiKey(cfg, apiKey) {
-    if (!apiKey) {
-        return null;
-    }
-    for (const key of Object.keys(QUERY_FNS)) {
-        const accounts = cfg[key];
-        if (!Array.isArray(accounts)) {
-            continue;
-        }
-        const index = accounts.findIndex(
-            (a) => a && a.apiKey && a.apiKey === apiKey,
-        );
-        if (index >= 0) {
-            return { key, index, account: accounts[index] };
-        }
-    }
-    return null;
-}
-
-// #endregion 账号匹配 --------------------------------
-
 // #region 脚本入口 ----------------
 
 /**
- * 查询并输出全部账号用量（兜底场景共用参数）
- *
- * 免费模型与匹配不到账号两种兜底场景共用：强制隐藏月度用完与无活跃套餐的账号，
- * 保证两处显示效果一致
+ * 查询并输出全部账号用量（免费模型与匹配不到账号两种兜底场景共用）
  *
  * @param {"auto" | "long" | "short"} display 展示档位
+ * @param {object} [cfg] 可选：调用方已读的 config，传入后 queryAll 不再重复 loadConfig
  * @returns {Promise<void>}
  */
-async function queryAllFallback(display) {
+async function queryAllFallback(display, cfg) {
     process.stdout.write(
         await queryAll({
             display,
             hideOnMonthlyExhausted: true,
             hideOnNoActivePlan: true,
             cache: true,
+            _config: cfg,
         }),
     );
 }
@@ -108,29 +86,30 @@ async function queryAllFallback(display) {
 async function main() {
     const { display } = parseArgs(process.argv);
 
-    // 使用免费模型时查询全部账号
+    // 首先判断模型名是否含 free（忽略大小写）：免费模型直接查询全部账号
     if (isFreeModel()) {
         await queryAllFallback(display);
         return;
     }
 
-    const apiKey = await getAPIKey();
+    // config 只读一次，匹配与子查询全程复用
     const cfg = loadConfig();
-
-    const matched = matchAccountByApiKey(cfg, apiKey);
+    const matched = await matchProviderAccount(cfg);
 
     // 匹配不到账号时也查询全部账号
     if (!matched) {
-        await queryAllFallback(display);
+        await queryAllFallback(display, cfg);
         return;
     }
 
     // hide 走默认 false，保留用完账号的显示；type 由查询函数回退到账号配置
+    // _config 复用上方已读的 cfg，避免子查询函数重复 loadConfig
     process.stdout.write(
         await QUERY_FNS[matched.key]({
             position: matched.index,
             display,
             cache: true,
+            _config: cfg,
         }),
     );
 }

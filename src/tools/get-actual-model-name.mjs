@@ -9,15 +9,15 @@
  * 按 display_name 匹配后输出真实模型名
  *
  * 用法:
- *   node get-actual-model.mjs
+ *   node get-actual-model-name.mjs
  *
- * 也可被 import 后调用 getActualModel(raw)
+ * 也可被 import 后调用 getActualModelName(raw)
  */
 
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { isMainModule } from "../utils/utils-query-usage.mjs";
+import { isMainModule, escapeRegExp } from "../utils/utils-query-usage.mjs";
 
 // #region 核心逻辑 ----------------
 
@@ -27,7 +27,7 @@ import { isMainModule } from "../utils/utils-query-usage.mjs";
  * @param {string} raw stdin 收到的 JSON 字符串
  * @returns {string} 真实模型名；解析失败时返回错误提示字符串
  */
-export function getActualModel(raw) {
+export function getActualModelName(raw) {
     let j;
     try {
         j = JSON.parse(raw);
@@ -46,7 +46,10 @@ export function getActualModel(raw) {
 
     // 读 settings.json 判断是否路由
 
-    const cfgPath = join(homedir(), ".claude", "settings.json");
+    // 测试可通过 CC_CLAUDE_SETTINGS_PATH 重定向到临时 settings.json，避免触碰真实 ~/.claude
+    const cfgPath =
+        process.env.CC_CLAUDE_SETTINGS_PATH ||
+        join(homedir(), ".claude", "settings.json");
     let cfg;
     try {
         cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
@@ -59,7 +62,7 @@ export function getActualModel(raw) {
         process.env.ANTHROPIC_BASE_URL || cfg?.env?.ANTHROPIC_BASE_URL || "";
 
     // 路由模式：在 env 配对的 MODEL_NAME/MODEL 中按 display_name 匹配真实模型名
-    if (/:\/\/(127\.0\.0\.1|localhost)/.test(baseUrl)) {
+    if (/:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(baseUrl)) {
         // 未匹配到任何 tier 时回退 display_name
         return matchRoutedModel(display, cfg.env || {}) ?? String(display);
     }
@@ -91,11 +94,19 @@ export function matchRoutedModel(displayName, env) {
         .sort((a, b) => b[1].length - a[1].length);
 
     for (const tierMatch of tierKeys) {
-        if (lower.includes(tierMatch[1].toLowerCase())) {
+        // env 键段用下划线连接（如 SONNET_4），真实 display_name 用连字符 / 空格 / 下划线
+        // 分隔（如 claude-sonnet-4、Claude Sonnet 4）：把下划线归一为任意分隔符再匹配，
+        // 否则多词 tier 永远匹配不到、静默回退到更短的通配 tier
+        // 先转义正则特殊字符（tier 名来自 settings.json 的 env 键，可能含 . ( ) 等），
+        // 避免 '.' 通配任意字符误匹配、不平衡括号抛 SyntaxError 使 smart 整体崩溃
+        const keyPattern = new RegExp(
+            escapeRegExp(tierMatch[1].toLowerCase()).replace(/_/g, "[-_\\s]"),
+        );
+        if (keyPattern.test(lower)) {
             const name = env[tierMatch[0]];
             const model = env[`ANTHROPIC_DEFAULT_${tierMatch[1]}_MODEL`];
-            // 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后，如 glm-latest[1M]
-            const suffix = String(model).match(/\[.*\]$/);
+            // 从 MODEL 提取末尾 [xxx] 后缀拼到 NAME 后，如 glm-latest[1M]；只取末尾单个括号组，避免贪心吞掉靠前括号
+            const suffix = String(model).match(/\[[^\]]*\]$/);
             return suffix ? `${name}${suffix[0]}` : String(name);
         }
     }
@@ -122,7 +133,7 @@ function main() {
         return;
     }
 
-    process.stdout.write(getActualModel(raw));
+    process.stdout.write(getActualModelName(raw));
 }
 
 if (isMainModule(import.meta.url)) {

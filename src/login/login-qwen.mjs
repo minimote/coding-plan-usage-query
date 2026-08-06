@@ -24,7 +24,7 @@ const KEY = "qwen";
  * 避免多账号登录时复用同一 profile 导致 cookie 写错账号
  *
  * @param {number} [position=0] qwen 账号在 config.qwen 数组中的位置
- * @returns {Promise<string>} 新的 cookie 字符串
+ * @returns {Promise<string | undefined>} 新的 cookie 字符串；用户取消登录时返回 undefined
  */
 export async function doLogin(position = 0) {
     const result = await runLogin({

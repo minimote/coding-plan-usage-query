@@ -70,7 +70,7 @@ function main() {
     // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
     if (process.stdin.isTTY) {
         process.stdout.write(
-            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用\n",
+            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
         );
         return;
     }

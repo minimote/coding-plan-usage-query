@@ -106,13 +106,15 @@ export function groupOutputs(outputs, { hideOnNoActivePlan = false } = {}) {
  *
  * @param {object} [options] 透传给各查询函数（display/hideOnMonthlyExhausted/hideOnNoActivePlan/cache）
  * @param {boolean} [options.hideOnNoActivePlan=false] 无活跃套餐时隐藏该行
+ * @param {object} [options._config] 内部：已解析的 config 对象，避免重复读取
  * @returns {Promise<string>} 多行输出（空行已过滤，无换行结尾）
  */
 export async function queryAll(options = {}) {
     const { hideOnNoActivePlan = false } = options;
     let cfg;
     try {
-        cfg = loadConfig();
+        // 复用调用方已读的 config，避免重复 loadConfig；未提供时自行读取
+        cfg = options._config || loadConfig();
     } catch (err) {
         return `${ERROR_MARK}${err.message}`;
     }

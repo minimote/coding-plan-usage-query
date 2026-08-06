@@ -168,7 +168,7 @@ export async function loadChromium() {
  * @throws {CanceledError} 用户留空取消
  */
 async function resolvePosition(key, len, initialPosition) {
-    if (initialPosition <= len) {
+    if (initialPosition >= 0 && initialPosition <= len) {
         return {
             position: initialPosition,
             willCreate: initialPosition === len,
@@ -236,10 +236,24 @@ async function runBrowserFlow(
         browserClosed = true;
     });
 
+    // 判定异常是否由浏览器关闭引起：监听标志位命中，或 Playwright 原英文错误信息匹配
+    const isBrowserClosedError = (err) =>
+        browserClosed || /has been closed|has been disposed/i.test(err.message);
+
     let result;
+    let page;
     try {
-        const page = ctx.pages()[0] || (await ctx.newPage());
-        await page.goto(loginUrl);
+        // 初始加载阶段（newPage/goto）浏览器被关闭时归一化为「浏览器被关闭」，
+        // 供 runLogin 重试判断；原英文 Playwright 错误匹配不上中文正则，会直接英文报错且不重试
+        try {
+            page = ctx.pages()[0] || (await ctx.newPage());
+            await page.goto(loginUrl);
+        } catch (err) {
+            if (isBrowserClosedError(err)) {
+                throw new Error("浏览器被关闭");
+            }
+            throw err;
+        }
 
         // 轮询检测登录完成（目标 cookie 出现即视为已登录）
         const deadline = Date.now() + 5 * 60 * 1000;
@@ -267,7 +281,7 @@ async function runBrowserFlow(
         try {
             result = await onLogin(ctx, page, cookies, () => browserClosed);
         } catch (err) {
-            if (browserClosed || /closed|disposed/i.test(err.message)) {
+            if (isBrowserClosedError(err)) {
                 throw new Error("浏览器被关闭");
             }
             throw err;

@@ -10,22 +10,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
     existsSync,
+    mkdtempSync,
     readFileSync,
     writeFileSync,
     rmSync,
 } from "fs";
-import { fileURLToPath } from "url";
+import { tmpdir } from "os";
+import { join } from "path";
 
-// 与 utils-query-usage.mjs 中 CACHE_PATH 保持一致的计算方式
-const CACHE_PATH = fileURLToPath(
-    new URL("../tmp/cache-usage.json", import.meta.url),
-);
+// 重定向缓存路径到临时目录：utils 的 getCachePath() 运行时读环境变量，
+// 避免清空正在运行的 statusline 的真实生产缓存
+const CACHE_DIR = mkdtempSync(join(tmpdir(), "cc-cache-test-"));
+process.env.CC_USAGE_CACHE_PATH = join(CACHE_DIR, "cache-usage.json");
+const CACHE_PATH = process.env.CC_USAGE_CACHE_PATH;
 
 import {
     readCache,
     writeCache,
     fetchUsageCached,
     CACHE_TTL_MS,
+    NEG_CACHE_TTL_MS,
 } from "../src/utils/utils-query-usage.mjs";
 
 function clearCache() {
@@ -99,12 +103,67 @@ test("readCache: 倒计时扣除已流逝秒数", () => {
     assert.equal(hit.usage.monthly, null);
 });
 
+test("readCache: sec 为 null（无重置）读回仍为 null，不误钳成 0", () => {
+    clearCache();
+    writeCache("ark:0:coding", {
+        usage: {
+            rolling: { pct: 50, sec: null },
+            weekly: { pct: 30, sec: 100 },
+            monthly: null,
+        },
+    });
+    const hit = readCache("ark:0:coding");
+    assert.ok(hit);
+    assert.equal(hit.usage.rolling.sec, null);
+    assert.ok(Math.abs(hit.usage.weekly.sec - 100) < 1);
+});
+
+test("readCache: sec 为负数（重置已过）读回保留负数，不钳成 0", () => {
+    clearCache();
+    writeCache("ark:0:coding", {
+        usage: {
+            rolling: { pct: 50, sec: -7200 },
+            weekly: { pct: 30, sec: 100 },
+            monthly: null,
+        },
+    });
+    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+    raw["ark:0:coding"].ts = Date.now() - 3000;
+    writeFileSync(CACHE_PATH, JSON.stringify(raw));
+    const hit = readCache("ark:0:coding");
+    assert.ok(hit);
+    // -7200 再减已流逝秒数，仍为负数（原 Math.max 会钳成 0）
+    assert.ok(hit.usage.rolling.sec < 0);
+    assert.ok(Math.abs(hit.usage.weekly.sec - 97) < 1);
+});
+
 test("readCache: 负缓存（错误输出）命中", () => {
     clearCache();
     writeCache("ark:0:coding", { output: "❌ 查询失败" });
     const hit = readCache("ark:0:coding");
     assert.ok(hit);
     assert.equal(hit.output, "❌ 查询失败");
+});
+
+test("readCache: 负缓存 TTL 长于正缓存，正缓存过期区间内负缓存仍命中", () => {
+    clearCache();
+    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    // 把时间戳改到正缓存 TTL 已过期、负缓存 TTL（30s）尚未过期的区间
+    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+    raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1000;
+    writeFileSync(CACHE_PATH, JSON.stringify(raw));
+    const hit = readCache("ark:0:coding");
+    assert.ok(hit, "负缓存 TTL 内应仍命中");
+    assert.equal(hit.output, "❌ 查询失败");
+});
+
+test("readCache: 负缓存 TTL 过期返回 null", () => {
+    clearCache();
+    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+    raw["ark:0:coding"].ts = Date.now() - NEG_CACHE_TTL_MS - 1;
+    writeFileSync(CACHE_PATH, JSON.stringify(raw));
+    assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("readCache: TTL 过期返回 null", () => {
@@ -137,6 +196,20 @@ test("fetchUsageCached: 命中缓存时不调用 fetchFn", async () => {
     });
     assert.equal(called, false);
     assert.equal(result.usage.rolling.pct, 50);
+});
+
+test("fetchUsageCached: 命中负缓存时直接返回 output 且不调用 fetchFn", async () => {
+    clearCache();
+    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    let called = false;
+    const result = await fetchUsageCached("ark:0:coding", true, async () => {
+        called = true;
+        return { rolling: { pct: 99, sec: 0 }, weekly: null, monthly: null };
+    });
+    assert.equal(called, false);
+    assert.equal(result.output, "❌ 查询失败");
+    // 负缓存命中返回 output 而非 usage
+    assert.equal("usage" in result, false);
 });
 
 test("fetchUsageCached: 未命中时调用 fetchFn 并写缓存", async () => {
@@ -188,4 +261,6 @@ test("writeCache: 多键共存于同一文件", () => {
 
 test.after(() => {
     clearCache();
+    delete process.env.CC_USAGE_CACHE_PATH;
+    rmSync(CACHE_DIR, { recursive: true, force: true });
 });
