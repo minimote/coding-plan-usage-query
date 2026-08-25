@@ -17,6 +17,7 @@
 import {
     DISPLAY,
     KEYS,
+    NO_ACTIVE_PLAN,
     DEFAULT_LABELS,
     renderWindows,
     renderErrorLine,
@@ -135,7 +136,8 @@ async function callUsageApi(cookie) {
 
     const inner = data?.DataV2?.data?.data;
     if (!inner) {
-        throw new Error("响应结构异常");
+        // 套餐过期/未订阅时接口返回 SUCCESS 但 data 内层为空，视为无活跃套餐
+        throw new Error(NO_ACTIVE_PLAN);
     }
     // 字段全缺失或改名时主动报错，避免静默渲染 0% 用量误导用户
     if (
