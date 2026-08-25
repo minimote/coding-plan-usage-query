@@ -62,7 +62,11 @@ export function getActualModelName(raw) {
         process.env.ANTHROPIC_BASE_URL || cfg?.env?.ANTHROPIC_BASE_URL || "";
 
     // 路由模式：在 env 配对的 MODEL_NAME/MODEL 中按 display_name 匹配真实模型名
-    if (/:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(baseUrl)) {
+    if (
+        /:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(
+            baseUrl,
+        )
+    ) {
         // 未匹配到任何 tier 时回退 display_name
         return matchRoutedModel(display, cfg.env || {}) ?? String(display);
     }
