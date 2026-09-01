@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft-07/schema#",
     "title": "CodingPlan Usage Query Config",
-    "description": "配置文件，包含火山方舟、Ollama、OpenCodeGo 和千问的账号凭据",
+    "description": "配置文件，包含所有账号凭据",
     "type": "object",
     "properties": {
         "$schema": {
@@ -53,6 +53,35 @@
                 "required": [
                     "accessKeyId",
                     "secretAccessKey"
+                ]
+            }
+        },
+        "commandcode": {
+            "title": "Command Code 账号列表",
+            "description": "",
+            "type": "array",
+            "items": {
+                "title": "Command Code 账号",
+                "type": "object",
+                "properties": {
+                    "longLabel": {
+                        "title": "长版显示标签 [选填]",
+                        "description": "不填则使用默认标签 (CommandCode)",
+                        "type": "string"
+                    },
+                    "shortLabel": {
+                        "title": "短版显示标签 [选填]",
+                        "description": "不填则使用默认标签 (CommandCode)",
+                        "type": "string"
+                    },
+                    "apiKey": {
+                        "title": "API Key <必填>",
+                        "description": "- Command Code 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "apiKey"
                 ]
             }
         },

@@ -52,6 +52,7 @@ export const TYPE = Object.freeze({
  */
 export const KEYS = Object.freeze({
     ARK: "ark",
+    COMMANDCODE: "commandcode",
     OLLAMA: "ollama",
     OPENCODE: "opencode",
     QWEN: "qwen",
@@ -120,7 +121,9 @@ export const CONFIG_PATH = join(
  *         agent: { long: string, short: string }
  *     },
  *     opencode: { long: string, short: string },
- *     qwen: { long: string, short: string }
+ *     ollama: { long: string, short: string },
+ *     qwen: { long: string, short: string },
+ *     commandcode: { long: string, short: string }
  * }}
  */
 export const DEFAULT_LABELS = deepFreeze({
@@ -133,6 +136,10 @@ export const DEFAULT_LABELS = deepFreeze({
             long: "火山Agent",
             short: "Agent",
         },
+    },
+    commandcode: {
+        long: "CommandCode",
+        short: "CommandCode",
     },
     ollama: {
         long: "Ollama",

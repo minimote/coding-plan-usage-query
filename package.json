@@ -1,7 +1,7 @@
 {
     "name": "coding-plan-usage-query",
-    "version": "2.7.1",
-    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
+    "version": "2.8.0",
+    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、Command Code、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
     "type": "module",
     "private": true,
     "engines": {
@@ -9,11 +9,12 @@
     },
     "scripts": {
         "ctx:tokens": "node src/tools/colorful-tokens.mjs",
-        "login:qwen": "node src/login/login-qwen.mjs",
         "login:opencode": "node src/login/login-opencode.mjs",
+        "login:qwen": "node src/login/login-qwen.mjs",
         "query": "node src/query/query-usage-smart.mjs",
         "query:all": "node src/query/query-usage-all.mjs",
         "query:ark": "node src/query/query-usage-ark.mjs",
+        "query:commandcode": "node src/query/query-usage-commandcode.mjs",
         "query:ollama": "node src/query/query-usage-ollama.mjs",
         "query:opencode": "node src/query/query-usage-opencode-go.mjs",
         "query:qwen": "node src/query/query-usage-qwen.mjs",

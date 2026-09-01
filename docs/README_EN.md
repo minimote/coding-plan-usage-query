@@ -24,6 +24,7 @@
 |                  Plan                   |        How to get data        |
 | :-------------------------------------: | :---------------------------: |
 | Volcengine Ark Coding Plan / Agent Plan |  Volcengine OpenAPI (AK/SK)   |
+|              Command Code               |         Internal API          |
 |              Ollama Cloud               |  HTML page parsing (cookie)   |
 |               OpenCode Go               |  HTML page parsing (cookie)   |
 |      Alibaba Cloud Qwen Token Plan      | Console internal API (cookie) |
@@ -57,6 +58,7 @@ coding-plan-usage-query/
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # Query all plans (parallel)
 │   │   ├── query-usage-ark.mjs            # Volcengine Ark query
+│   │   ├── query-usage-commandcode.mjs    # Command Code query
 │   │   ├── query-usage-ollama.mjs         # Ollama Cloud query
 │   │   ├── query-usage-opencode-go.mjs    # OpenCode Go query
 │   │   ├── query-usage-qwen.mjs           # Qwen Token Plan query
@@ -91,6 +93,7 @@ Copy `config/config.example.json` to `config/config.json`.
 Open `config.json` and fill in credentials according to `config.schema.json`:
 
 - **Volcengine Ark Coding Plan / Agent Plan**: Create an AccessKey in the Volcengine console, fill in `accessKeyId` and `secretAccessKey`
+- **Command Code**: Get an API Key from the Command Code website, fill in `apiKey`
 - **Ollama Cloud**: Fill in `cookie` according to `config.schema.json`
 - **OpenCode Go**: Run `login-opencode.cmd` to auto-fill `authCookie` and `workspaceID`, or fill in manually according to `config.schema.json`
 - **Alibaba Cloud Qwen Token Plan**: Run `login-qwen.cmd` to auto-fill the `cookie`, or fill in manually according to `config.schema.json`
@@ -111,6 +114,9 @@ node src/query/query-usage-ark.mjs
 
 # Volcengine Ark Agent Plan (override)
 node src/query/query-usage-ark.mjs --type agent
+
+# Command Code
+node src/query/query-usage-commandcode.mjs
 
 # Ollama Cloud
 node src/query/query-usage-ollama.mjs
@@ -134,7 +140,7 @@ node src/query/query-usage-ark.mjs --position 1
 node src/tools/preview.mjs
 ```
 
-> The above commands can also be run via npm scripts: `npm run query` (smart), `npm run query:all`, `npm run query:ark`/`query:ollama`/`query:opencode`/`query:qwen` (per-plan), `npm run login:qwen`/`login:opencode` (login). To pass arguments, add `--`, e.g. `npm run query:ark -- --type agent`.
+> The above commands can also be run via npm scripts: `npm run query` (smart), `npm run query:all`, `npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen` (per-plan), `npm run login:qwen`/`login:opencode` (login). To pass arguments, add `--`, e.g. `npm run query:ark -- --type agent`.
 
 ## Command Line Arguments
 
@@ -152,7 +158,7 @@ Query scripts support the following arguments:
 
 ## Configuration
 
-`config/config.json` is a JSON object with four keys: `ark` (Volcengine Ark accounts), `ollama` (Ollama Cloud accounts), `opencode` (OpenCode Go accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
+`config/config.json` is a JSON object with five keys: `ark` (Volcengine Ark accounts), `commandcode` (Command Code accounts), `ollama` (Ollama Cloud accounts), `opencode` (OpenCode Go accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
 
 ### Volcengine Ark Coding Plan / Agent Plan
 
@@ -188,6 +194,25 @@ Query scripts support the following arguments:
 |          `apiKey`          |    No    | CC-Switch API Key for matching current account                          |
 
 Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accounts need `AccessKeySelfManageAccess` and `ArkReadOnlyAccess` permissions).
+
+### Command Code
+
+```json
+{
+    "commandcode": [
+        {
+            "apiKey": "xxx",
+            "shortLabel": "CommandCode",
+            "longLabel": "CommandCode"
+        }
+    ]
+}
+```
+
+|           Field            | Required | Description                                                            |
+| :------------------------: | :------: | ---------------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `CommandCode`                               |
+|          `apiKey`          |   Yes    | Command Code API Key, used for usage queries and smart-script matching |
 
 ### Ollama Cloud
 

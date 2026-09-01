@@ -1,5 +1,15 @@
 # 更新日志
 
+## v2.8.0-2026.09.01
+
+### 新增
+
+- Command Code 用量查询（`src/query/query-usage-commandcode.mjs`）：读取 `config.json` 的 `commandcode` 凭据，并行请求 `/alpha/billing/credits`（五小时 / 周窗口用量来自 `windowLimits`、月剩余额度来自 `monthlyCredits`）与 `/alpha/billing/subscriptions`（`planId` 与月度周期），拼接出三窗口用量。月上限不在响应中，按 `planId` 维护 `PLAN_MONTHLY_CREDITS` 查表换算月用量 = `(planLimit - monthlyCredits) / planLimit`；查不到表或缺 subscriptions 时月窗口置 null（渲染显示 `月:--`）。鉴权失败（401 / 403，API Key 无效或被吊销）归一为 `NO_ACTIVE_PLAN` 无活跃套餐；三窗口全部解析失败时报「响应结构异常」，避免静默渲染 0% 误导；`apiKey` 为空给出明确提示。复用统一 `REQUEST_TIMEOUT_MS` 超时
+- 接入查询体系：`utils-query-usage.mjs` 新增 `KEYS.COMMANDCODE` 与 `DEFAULT_LABELS.commandcode`（默认 `CommandCode`）；`query-usage-all.mjs` 的 `QUERY_FNS` 接入，输出与匹配顺序为 ark → commandcode → ollama → opencode → qwen
+- 配置文件：`config.example.json` / `config.schema.json` 新增 `commandcode` 账号数组（`apiKey` / `longLabel` / `shortLabel`）
+- `package.json`：新增 `query:commandcode` script
+- 单元测试（`test/query-usage-commandcode.test.mjs`）：覆盖三窗口解析、`monthlyCredits` 表示月剩余而非月上限、非 GOAT 套餐查表换算月上限、`monthlyCredits` / `window.used` 为 null / "" / false 等脏数据不误显 100% / 0%、`planId` 不在表中或缺 subscriptions 时月窗口为 null；通过 stub `globalThis.fetch` 覆盖 401 / 403 → 无活跃套餐、500 → HTTP 错误、结构异常等请求层分支，不依赖真实网络
+
 ## v2.7.1-2026.08.25
 
 ### 修复
@@ -25,7 +35,7 @@
 ### 变更
 
 - `get-actual-model.mjs` 拆分重命名为 `get-actual-model-name.mjs`（导出 `getActualModelName`），并新增配套的 `get-actual-provider-name.mjs`；README / README_EN 项目结构同步更新
-- 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display_name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符 `[-_\s]`，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp` 转义，避免 `.` 通配任意字符误匹配、不平衡括号抛 `SyntaxError` 使 smart 整体崩溃；`[xxx]` 后缀提取改为只取末尾单个括号组 `/\[[^\]]*\]$/`，避免贪心吞掉靠前括号
+- 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display*name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符 `[-*\s]`，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp`转义，避免`.`通配任意字符误匹配、不平衡括号抛`SyntaxError` 使 smart 整体崩溃；`[xxx]`后缀提取改为只取末尾单个括号组`/\[[^\]]\*\]$/`，避免贪心吞掉靠前括号
 - `query-usage-smart.mjs` 重构：免费模型判断抽出纯函数 `isFreeModelName(raw)` 供单测；`matchAccountByApiKey` 从 smart 迁移到 `utils-query-usage.mjs`（按 `KEYS` 顺序遍历）并由 `matchProviderAccount` 包装（内部调 `getAPIKey`）；config 只读一次全程复用——`queryAllFallback` 与命中账号的子查询均通过 `_config` 透传已读的 cfg，避免每个账号重复 `loadConfig`
 - 倒计时渲染统一处理缺失 / 负数：`renderWindows` 中 null / NaN / Infinity / 负数 / 非数字秒数一律显示 `↻ --`，负数表示「重置时间已过或不可用」不再被钳成 0 分钟误导；`toCountdown` 增加脏数据防御，非有限数字归零；`readCache` 倒计时扣除时 null 保持 null、不再钳 0；ark / qwen / ollama / opencode-go 各查询脚本 `sec` 缺失改 null、负数原样透传，统一交给渲染层显示
 - 倒计时颜色由白（#E0E0E0）改为浅灰（#B0B0B0），与窗口标签区分又不至于抢过数据焦点
