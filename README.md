@@ -24,9 +24,10 @@
 |               套餐                |        获取方式         |
 | :-------------------------------: | :---------------------: |
 | 火山方舟 Coding Plan / Agent Plan | 火山引擎 OpenAPI(AK/SK) |
+|           Command Code            |        内部 API         |
 |           Ollama Cloud            | 页面 HTML 解析(cookie)  |
 |            OpenCode Go            | 页面 HTML 解析(cookie)  |
-|       阿里云千问 Token Plan       | 控制台内部 API(cookie)  |
+|       阿里云千问 Token Plan       |    内部 API(cookie)     |
 
 ## 效果预览
 
@@ -57,6 +58,7 @@ coding-plan-usage-query/
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # 查询全部套餐（并行）
 │   │   ├── query-usage-ark.mjs            # 火山方舟用量查询
+│   │   ├── query-usage-commandcode.mjs    # Command Code 用量查询
 │   │   ├── query-usage-ollama.mjs         # Ollama Cloud 用量查询
 │   │   ├── query-usage-opencode-go.mjs    # OpenCode Go 用量查询
 │   │   ├── query-usage-qwen.mjs           # 千问 Token Plan 用量查询
@@ -91,6 +93,7 @@ coding-plan-usage-query/
 打开 `config.json`，按 `config.schema.json` 中的字段说明填入凭据：
 
 - **火山方舟 Coding Plan / Agent Plan**：在火山引擎控制台创建 AccessKey，填入 `accessKeyId` 和 `secretAccessKey`
+- **Command Code**：在 Command Code 官网获取 API Key，填入 `apiKey`
 - **Ollama Cloud**：根据 `config.schema.json` 提示填写 `cookie`
 - **OpenCode Go**：运行 `login-opencode.cmd` 自动写入 `authCookie` 和 `workspaceID`，或根据 `config.schema.json` 提示填写
 - **阿里云千问 Token Plan**：运行 `login-qwen.cmd` 自动写入 `cookie`，或根据 `config.schema.json` 提示填写
@@ -111,6 +114,9 @@ node src/query/query-usage-ark.mjs
 
 # 火山方舟 Agent Plan（强制指定）
 node src/query/query-usage-ark.mjs --type agent
+
+# Command Code
+node src/query/query-usage-commandcode.mjs
 
 # Ollama Cloud
 node src/query/query-usage-ollama.mjs
@@ -134,7 +140,7 @@ node src/query/query-usage-ark.mjs --position 1
 node src/tools/preview.mjs
 ```
 
-> 上述命令也可通过 npm scripts 快捷运行：`npm run query`（smart）、`npm run query:all`、`npm run query:ark`/`query:ollama`/`query:opencode`/`query:qwen`（各套餐）、`npm run login:qwen`/`login:opencode`（登录）。透传参数时需加 `--`，如 `npm run query:ark -- --type agent`。
+> 上述命令也可通过 npm scripts 快捷运行：`npm run query`（smart）、`npm run query:all`、`npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen`（各套餐）、`npm run login:qwen`/`login:opencode`（登录）。透传参数时需加 `--`，如 `npm run query:ark -- --type agent`。
 
 ## 命令行参数
 
@@ -152,7 +158,7 @@ node src/tools/preview.mjs
 
 ## 配置文件说明
 
-配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`ollama`、`opencode`、`qwen` 四个数组，分别对应火山方舟、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。`apiKey` 字段用于 `query-usage-smart.mjs` 匹配当前供应商，不使用 smart 脚本可不填。
+配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`commandcode`、`ollama`、`opencode`、`qwen` 五个数组，分别对应火山方舟、Command Code、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。`apiKey` 字段用于 `query-usage-smart.mjs` 匹配当前供应商，不使用 smart 脚本可不填。
 
 ### 火山方舟 Coding Plan / Agent Plan
 
@@ -188,6 +194,25 @@ node src/tools/preview.mjs
 |          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号               |
 
 在火山引擎控制台 <https://console.volcengine.com/iam/keymanage> 创建 AccessKey（子账户需具有 `AccessKeySelfManageAccess` 和 `ArkReadOnlyAccess` 权限）。
+
+### Command Code
+
+```json
+{
+    "commandcode": [
+        {
+            "apiKey": "xxx",
+            "shortLabel": "CommandCode",
+            "longLabel": "CommandCode"
+        }
+    ]
+}
+```
+
+|            字段            | 必填 | 说明                                                           |
+| :------------------------: | :--: | -------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（CommandCode）                        |
+|          `apiKey`          |  是  | Command Code 的 API Key，用于查询用量和 smart 脚本匹配当前账号 |
 
 ### Ollama Cloud
 

@@ -12,13 +12,14 @@ import {
     WINDOW,
 } from "../utils/utils-query-usage.mjs";
 
-// 假数据：按阅读顺序（行内从左到右、行间从上到下）循环 绿→黄→橙→红 四档颜色
+// 假数据：按阅读顺序（行内从左到右、行间从上到下）循环[绿→黄→橙→红]四档颜色
+// 颜色区间：0-59% 绿，60-79% 黄，80-99% 橙，100% 红
 // 百分比用 1/2/8/9 结尾，五小时不超过周用量的 2 倍，周不超过月用量的 2 倍
 const samples = [
     {
         prefixes: DEFAULT_LABELS[KEYS.ARK].agent,
         usage: {
-            [WINDOW.ROLLING]: { pct: 11, sec: 16000 },
+            [WINDOW.ROLLING]: { pct: 21, sec: 16000 },
             [WINDOW.WEEKLY]: { pct: 62, sec: 230000 },
             [WINDOW.MONTHLY]: { pct: 88, sec: 320000 },
         },
@@ -27,30 +28,38 @@ const samples = [
         prefixes: DEFAULT_LABELS[KEYS.ARK].coding,
         usage: {
             [WINDOW.ROLLING]: { pct: 100, sec: 300 },
-            [WINDOW.WEEKLY]: { pct: 51, sec: 300000 },
+            [WINDOW.WEEKLY]: { pct: 52, sec: 300000 },
             [WINDOW.MONTHLY]: { pct: 71, sec: 760000 },
+        },
+    },
+    {
+        prefixes: DEFAULT_LABELS[KEYS.COMMANDCODE],
+        usage: {
+            [WINDOW.ROLLING]: { pct: 89, sec: 9000 },
+            [WINDOW.WEEKLY]: { pct: 100, sec: 210000 },
+            [WINDOW.MONTHLY]: { pct: 58, sec: 2600000 },
         },
     },
     {
         prefixes: DEFAULT_LABELS[KEYS.OLLAMA],
         usage: {
-            [WINDOW.ROLLING]: { pct: 89, sec: 2000 },
-            [WINDOW.WEEKLY]: { pct: 100, sec: 50000 },
+            [WINDOW.ROLLING]: { pct: 61, sec: 2000 },
+            [WINDOW.WEEKLY]: { pct: 92, sec: 50000 },
         },
     },
     {
         prefixes: DEFAULT_LABELS[KEYS.OPENCODE],
         usage: {
-            [WINDOW.ROLLING]: { pct: 18, sec: 14000 },
-            [WINDOW.WEEKLY]: { pct: 79, sec: 130000 },
-            [WINDOW.MONTHLY]: { pct: 91, sec: 240000 },
+            [WINDOW.ROLLING]: { pct: 100, sec: 14000 },
+            [WINDOW.WEEKLY]: { pct: 51, sec: 130000 },
+            [WINDOW.MONTHLY]: { pct: 69, sec: 240000 },
         },
     },
     {
         prefixes: DEFAULT_LABELS[KEYS.QWEN],
         usage: {
-            [WINDOW.ROLLING]: { pct: 100, sec: 300 },
-            [WINDOW.WEEKLY]: { pct: 52, sec: 290000 },
+            [WINDOW.ROLLING]: { pct: 92, sec: 300 },
+            [WINDOW.WEEKLY]: { pct: 100, sec: 290000 },
         },
     },
 ];

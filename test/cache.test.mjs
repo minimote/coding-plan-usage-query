@@ -9,7 +9,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-    existsSync,
     mkdtempSync,
     readFileSync,
     writeFileSync,

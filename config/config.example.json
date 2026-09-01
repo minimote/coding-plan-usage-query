@@ -18,6 +18,13 @@
             "secretAccessKey": "xxx"
         }
     ],
+    "commandcode": [
+        {
+            "apiKey": "xxx",
+            "shortLabel": "CommandCode",
+            "longLabel": "CommandCode"
+        }
+    ],
     "ollama": [
         {
             "apiKey": "xxx",
