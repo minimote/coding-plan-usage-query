@@ -138,27 +138,27 @@ test("readCache: sec 为负数（重置已过）读回保留负数，不钳成 0
 
 test("readCache: 负缓存（错误输出）命中", () => {
     clearCache();
-    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    writeCache("ark:0:coding", { error: "查询失败" });
     const hit = readCache("ark:0:coding");
     assert.ok(hit);
-    assert.equal(hit.output, "❌ 查询失败");
+    assert.equal(hit.error, "查询失败");
 });
 
 test("readCache: 负缓存 TTL 长于正缓存，正缓存过期区间内负缓存仍命中", () => {
     clearCache();
-    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    writeCache("ark:0:coding", { error: "查询失败" });
     // 把时间戳改到正缓存 TTL 已过期、负缓存 TTL（30s）尚未过期的区间
     const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
     raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1000;
     writeFileSync(CACHE_PATH, JSON.stringify(raw));
     const hit = readCache("ark:0:coding");
     assert.ok(hit, "负缓存 TTL 内应仍命中");
-    assert.equal(hit.output, "❌ 查询失败");
+    assert.equal(hit.error, "查询失败");
 });
 
 test("readCache: 负缓存 TTL 过期返回 null", () => {
     clearCache();
-    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    writeCache("ark:0:coding", { error: "查询失败" });
     const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
     raw["ark:0:coding"].ts = Date.now() - NEG_CACHE_TTL_MS - 1;
     writeFileSync(CACHE_PATH, JSON.stringify(raw));
@@ -197,17 +197,17 @@ test("fetchUsageCached: 命中缓存时不调用 fetchFn", async () => {
     assert.equal(result.usage.rolling.pct, 50);
 });
 
-test("fetchUsageCached: 命中负缓存时直接返回 output 且不调用 fetchFn", async () => {
+test("fetchUsageCached: 命中负缓存时直接返回错误消息且不调用 fetchFn", async () => {
     clearCache();
-    writeCache("ark:0:coding", { output: "❌ 查询失败" });
+    writeCache("ark:0:coding", { error: "查询失败" });
     let called = false;
     const result = await fetchUsageCached("ark:0:coding", true, async () => {
         called = true;
         return { rolling: { pct: 99, sec: 0 }, weekly: null, monthly: null };
     });
     assert.equal(called, false);
-    assert.equal(result.output, "❌ 查询失败");
-    // 负缓存命中返回 output 而非 usage
+    assert.equal(result.error, "查询失败");
+    // 负缓存命中返回 error 而非 usage
     assert.equal("usage" in result, false);
 });
 
@@ -250,11 +250,11 @@ test("fetchUsageCached: fetchFn 抛错时透传异常、不写缓存", async () 
 
 test("writeCache: 多键共存于同一文件", () => {
     clearCache();
-    writeCache("ark:0:coding", { output: "err1" });
+    writeCache("ark:0:coding", { error: "err1" });
     writeCache("opencode:0", {
         usage: { rolling: { pct: 1, sec: 1 }, weekly: null, monthly: null },
     });
-    assert.ok(readCache("ark:0:coding").output);
+    assert.ok(readCache("ark:0:coding").error);
     assert.ok(readCache("opencode:0").usage);
 });
 

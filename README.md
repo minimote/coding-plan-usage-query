@@ -26,7 +26,7 @@
 | 火山方舟 Coding Plan / Agent Plan | 火山引擎 OpenAPI(AK/SK) |
 |           Command Code            |        内部 API         |
 |           Ollama Cloud            | 页面 HTML 解析(cookie)  |
-|            OpenCode Go            | 页面 HTML 解析(cookie)  |
+|            OpenCode Go            |        内部 API         |
 |       阿里云千问 Token Plan       |    内部 API(cookie)     |
 
 ## 效果预览
@@ -47,13 +47,11 @@ coding-plan-usage-query/
 │   ├── README_EN.md                       # 英文版 README
 │   └── preview.png                        # 效果预览图
 ├── scripts/
-│   ├── login-opencode.cmd                 # Windows 双击登录 OpenCode Go
 │   ├── login-qwen.cmd                     # Windows 双击登录千问
 │   ├── preview.cmd                        # Windows 双击预览显示效果
 │   └── query-usage-all.cmd                # Windows 双击运行（UTF-8 chcp 65001）
 ├── src/
 │   ├── login/
-│   │   ├── login-opencode.mjs             # OpenCode Go 登录
 │   │   └── login-qwen.mjs                 # 千问登录
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # 查询全部套餐（并行）
@@ -95,7 +93,7 @@ coding-plan-usage-query/
 - **火山方舟 Coding Plan / Agent Plan**：在火山引擎控制台创建 AccessKey，填入 `accessKeyId` 和 `secretAccessKey`
 - **Command Code**：在 Command Code 官网获取 API Key，填入 `apiKey`
 - **Ollama Cloud**：根据 `config.schema.json` 提示填写 `cookie`
-- **OpenCode Go**：运行 `login-opencode.cmd` 自动写入 `authCookie` 和 `workspaceID`，或根据 `config.schema.json` 提示填写
+- **OpenCode Go**：在 OpenCode Console 订阅 Go 后创建 API Key，填入 `apiKey`
 - **阿里云千问 Token Plan**：运行 `login-qwen.cmd` 自动写入 `cookie`，或根据 `config.schema.json` 提示填写
 
 详细说明见下方 [配置文件说明](#配置文件说明)。
@@ -130,9 +128,6 @@ node src/query/query-usage-qwen.mjs
 # 使用浏览器登录千问，自动读取凭据
 node src/login/login-qwen.mjs
 
-# 使用浏览器登录 OpenCode Go，自动读取凭据
-node src/login/login-opencode.mjs
-
 # 指定账号位置（从 0 开始）
 node src/query/query-usage-ark.mjs --position 1
 
@@ -140,7 +135,7 @@ node src/query/query-usage-ark.mjs --position 1
 node src/tools/preview.mjs
 ```
 
-> 上述命令也可通过 npm scripts 快捷运行：`npm run query`（smart）、`npm run query:all`、`npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen`（各套餐）、`npm run login:qwen`/`login:opencode`（登录）。透传参数时需加 `--`，如 `npm run query:ark -- --type agent`。
+> 上述命令也可通过 npm scripts 快捷运行：`npm run query`（smart）、`npm run query:all`、`npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen`（各套餐）、`npm run login:qwen`（登录）。透传参数时需加 `--`，如 `npm run query:ark -- --type agent`。
 
 ## 命令行参数
 
@@ -154,11 +149,11 @@ node src/tools/preview.mjs
 | `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时隐藏该条查询（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                     |
 |  `--hide-on-no-active-plan`   |  -   | 无活跃套餐时隐藏该条查询（`true`/`false`，默认 `false`，仅 `all` 脚本生效）                                        |
 
-> 登录脚本（`login-qwen`/`login-opencode`）仅支持 `--position`/`-p` 参数。`position` 取 0~N（N 为当前账号数）：`< N` 更新已有账号，`= N` 新建第 N+1 个账号；越界时会提示重新输入，开浏览器前会要求确认。
+> 登录脚本（`login-qwen`）仅支持 `--position`/`-p` 参数。`position` 取 0~N（N 为当前账号数）：`< N` 更新已有账号，`= N` 新建第 N+1 个账号；越界时会提示重新输入，开浏览器前会要求确认。
 
 ## 配置文件说明
 
-配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`commandcode`、`ollama`、`opencode`、`qwen` 五个数组，分别对应火山方舟、Command Code、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。`apiKey` 字段用于 `query-usage-smart.mjs` 匹配当前供应商，不使用 smart 脚本可不填。
+配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`commandcode`、`ollama`、`opencode`、`qwen` 五个数组，分别对应火山方舟、Command Code、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。
 
 ### 火山方舟 Coding Plan / Agent Plan
 
@@ -245,20 +240,16 @@ node src/tools/preview.mjs
         {
             "apiKey": "xxx",
             "shortLabel": "Go",
-            "longLabel": "OpenCodeGo",
-            "workspaceID": "wrk_xxx",
-            "authCookie": "xxx"
+            "longLabel": "OpenCode Go"
         }
     ]
 }
 ```
 
-|            字段            | 必填 | 说明                                                           |
-| :------------------------: | :--: | :------------------------------------------------------------- |
-| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（OpenCodeGo/Go）                      |
-|        `authCookie`        |  是  | opencode.ai 的 auth cookie，运行 `login-opencode.cmd` 自动填充 |
-|       `workspaceID`        |  是  | 工作区 ID，形如 `wrk_...`，运行 `login-opencode.cmd` 自动填充  |
-|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号               |
+|            字段            | 必填 | 说明                                             |
+| :------------------------: | :--: | :----------------------------------------------- |
+| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（OpenCode Go/Go）       |
+|          `apiKey`          |  是  | OpenCode Go 的 API Key，CC-Switch 里填的同一个值 |
 
 ### 阿里云千问 Token Plan
 
@@ -268,7 +259,7 @@ node src/tools/preview.mjs
         {
             "shortLabel": "千问",
             "longLabel": "千问",
-            "apiKey": "sk-sp-xxx",
+            "apiKey": "xxx",
             "cookie": "xxx"
         }
     ]

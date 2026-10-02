@@ -22,6 +22,10 @@ import {
     resolvePrefixes,
     matchAccountByApiKey,
     matchProviderAccount,
+    isTransientError,
+    toResetSec,
+    ensureAnyWindow,
+    NO_ACTIVE_PLAN,
     COLORS,
 } from "../src/utils/utils-query-usage.mjs";
 
@@ -254,6 +258,34 @@ test("renderWindows: usage 缺少某窗口键时不输出该窗口", () => {
     assert.ok(out.includes("五:"));
     assert.ok(out.includes("周:"));
     assert.ok(!out.includes("月:"));
+});
+
+test("renderWindows: note 作为行尾预警输出，不进窗口段", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: null,
+        note: "月剩余 $5.50，当前为「individual-goat-v2」套餐",
+    };
+    // 标签后跟 ANSI reset 码，去掉后再断言
+    const plain = renderWindows(usage, DISPLAY.SHORT).replace(
+        /\x1b\[[\d;]*m/g,
+        "",
+    );
+    assert.ok(plain.includes("⚠ 月剩余 $5.50"), "应输出预警");
+    assert.ok(plain.includes("月:--"), "月窗口仍显示横线");
+    assert.ok(plain.includes("| ⚠ "), "预警应是独立的 ' | ' 段");
+    assert.ok(!plain.includes("月:--⚠"), "预警不应粘在窗口后");
+});
+
+test("renderWindows: note 不影响 hideOnMonthlyExhausted 的隐藏", () => {
+    const usage = {
+        rolling: { pct: 10, sec: 1800 },
+        weekly: { pct: 50, sec: 500000 },
+        monthly: { pct: 100, sec: 2000000 },
+        note: "不该出现",
+    };
+    assert.equal(renderWindows(usage, DISPLAY.SHORT, null, true), "");
 });
 
 test("renderWindows: AUTO 档窄终端回退 SHORT", () => {
@@ -714,3 +746,75 @@ test("matchProviderAccount: getAPIKey 抛错（settings 缺失）时异常冒泡
 // #endregion matchProviderAccount ----------------
 
 // #endregion 账号匹配 --------------------------------
+
+// #region isTransientError ----------------
+
+test("isTransientError: 超时视为瞬时故障（写负缓存）", () => {
+    const err = new Error("The operation was aborted due to timeout");
+    err.name = "TimeoutError";
+    assert.equal(isTransientError(err), true);
+});
+
+test("isTransientError: 5xx 等未知网络错误视为瞬时故障", () => {
+    assert.equal(isTransientError(new Error("请求失败(HTTP 500)")), true);
+    assert.equal(isTransientError(new Error("fetch failed")), true);
+});
+
+test("isTransientError: 无活跃套餐 / apiKey 无效不是瞬时故障", () => {
+    // 都要用户改配置/订阅才解：写负缓存会让修好后仍被旧错误挡满 30s
+    assert.equal(isTransientError(new Error(NO_ACTIVE_PLAN)), false);
+    assert.equal(isTransientError(new Error("apiKey 无效")), false);
+    assert.equal(isTransientError(new Error("apiKey 无效(重定向到 ...)")), false);
+});
+
+test("isTransientError: cookie 失效/过期不是瞬时故障", () => {
+    // 需用户重新登录才解，写负缓存会让用户重登后 30s 内仍看到旧「cookie 失效」
+    assert.equal(isTransientError(new Error("cookie 失效，请运行 login-qwen.cmd 重新登录")), false);
+    assert.equal(isTransientError(new Error("cookie 已过期或无效(重定向到 https://ollama.com/login)")), false);
+});
+
+// #endregion isTransientError ----------------
+
+// #region ensureAnyWindow ----------------
+
+test("ensureAnyWindow: 三窗口全空且无 note 抛响应结构异常", () => {
+    assert.throws(
+        () => ensureAnyWindow({ rolling: null, weekly: null, monthly: null, note: null }),
+        /响应结构异常/,
+    );
+});
+
+test("ensureAnyWindow: 三窗口全空但有降级 note 不抛（保留诊断说明）", () => {
+    // commandcode 命中未知 planId 时只能给出 note，不应被当成结构异常吞掉
+    const usage = { rolling: null, weekly: null, monthly: null, note: "月剩余 $5.50，当前为「x」套餐" };
+    assert.doesNotThrow(() => ensureAnyWindow(usage));
+});
+
+// #endregion ensureAnyWindow ----------------
+
+// #region toResetSec ----------------
+
+const NOW_MS = 1784800000000;
+
+test("toResetSec: 毫秒时间戳 → 秒倒计时", () => {
+    assert.equal(toResetSec(NOW_MS + 3600e3, NOW_MS), 3600);
+    assert.equal(toResetSec(NOW_MS, NOW_MS), 0);
+});
+
+test("toResetSec: 数字字符串可用（上游偶发序列化成字符串）", () => {
+    assert.equal(toResetSec(String(NOW_MS + 60e3), NOW_MS), 60);
+});
+
+test("toResetSec: 缺失/非数字/非正值 → null，不当成 1970 年", () => {
+    // 上游对「无重置时间」有 null / undefined / 空串 / 0 多种形态：
+    // 按 1970 年算会得出巨大负倒计时，并让 ollama 的文本时长回退分支失效
+    for (const ts of [null, undefined, "", 0, -1, "not-a-time", NaN, Infinity]) {
+        assert.equal(toResetSec(ts, NOW_MS), null, `ts=${String(ts)}`);
+    }
+});
+
+test("toResetSec: 过去时间戳给负数，不钳 0", () => {
+    assert.equal(toResetSec(NOW_MS - 60e3, NOW_MS), -60);
+});
+
+// #endregion toResetSec ----------------

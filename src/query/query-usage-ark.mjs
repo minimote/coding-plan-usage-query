@@ -17,23 +17,21 @@
  */
 
 import {
-    DISPLAY,
     TYPE,
     normalizeType,
     KEYS,
     NO_ACTIVE_PLAN,
-    renderWindows,
-    renderErrorLine,
-    friendlyError,
-    loadConfig,
     resolvePrefixes,
     DEFAULT_LABELS,
-    findAccount,
-    parseArgs,
-    fetchUsageCached,
-    writeCache,
     isMainModule,
-    REQUEST_TIMEOUT_MS,
+    ensureAnyWindow,
+    httpStatusError,
+    isTransientError,
+    toResetSec,
+    fetchWithTimeout,
+    readJsonResponse,
+    runQueryCli,
+    runQueryUsage,
 } from "../utils/utils-query-usage.mjs";
 import { createHmac, createHash } from "crypto";
 
@@ -183,7 +181,7 @@ async function callOpenApi(action, ak, sk) {
         body,
     );
 
-    const resp = await fetch(`https://${HOST}/?${canonicalQuery}`, {
+    const resp = await fetchWithTimeout(`https://${HOST}/?${canonicalQuery}`, {
         method: "POST",
         headers: {
             "X-Date": xDate,
@@ -192,7 +190,6 @@ async function callOpenApi(action, ak, sk) {
             Authorization: authorization,
         },
         body,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!resp.ok) {
@@ -206,10 +203,10 @@ async function callOpenApi(action, ak, sk) {
         } catch {
             /* 忽略 */
         }
-        throw new Error(`HTTP ${resp.status}${detail}`);
+        throw new Error(`${httpStatusError(resp.status)}${detail}`);
     }
 
-    const data = await resp.json();
+    const data = await readJsonResponse(resp);
     const meta = data.ResponseMetadata;
     if (meta?.Error) {
         throw new Error(`${meta.Error.Code}: ${meta.Error.Message}`);
@@ -309,7 +306,7 @@ export function parseAfpResponse(data) {
  *     monthly: ({ pct: number, sec: number } | null)
  * }>}
  */
-async function fetchUsage(ak, sk, type) {
+async function fetchPlanUsage(ak, sk, type) {
     const apiAction =
         type === TYPE.CODING ? "GetCodingPlanUsage" : "GetAFPUsage";
     const data = await callOpenApi(apiAction, ak, sk);
@@ -323,32 +320,30 @@ async function fetchUsage(ak, sk, type) {
         throw new Error(NO_ACTIVE_PLAN);
     }
 
-    const now = Math.floor(Date.now() / 1000);
-
+    const now = Date.now();
     /** @param {string} key 窗口标识（session / weekly / monthly） */
     const getUsage = (key) => {
         const item = tiers.find((t) => t.label === key);
         if (!item) {
             return null;
         }
-        // sec 为 null 表示无重置（见 parseCodingPlanResponse 契约）；负数（-1 / 重置时间已过）原样透传，
-        // 由 renderWindows 统一显示 ↻ --，不再钳成 0 分钟误导
-        let sec = null;
-        if (item.resetTimestamp != null) {
-            const ts =
-                typeof item.resetTimestamp === "number"
-                    ? item.resetTimestamp
-                    : parseInt(item.resetTimestamp, 10);
-            sec = (ts > 1e12 ? Math.floor(ts / 1000) : ts) - now;
-        }
-        return { pct: item.percent, sec };
+        // ark 的 resetTimestamp 是秒级 epoch，个别账号给过毫秒，先统一成毫秒再套共享助手
+        const ts =
+            typeof item.resetTimestamp === "number"
+                ? item.resetTimestamp
+                : parseInt(item.resetTimestamp, 10);
+        const ms = Number.isFinite(ts) && ts > 1e12 ? ts : ts * 1000;
+        return { pct: item.percent, sec: toResetSec(ms, now) };
     };
 
-    return {
+    const usage = {
         rolling: getUsage("session"),
         weekly: getUsage("weekly"),
         monthly: getUsage("monthly"),
     };
+    // 字段改名/接口更新时主动报错，避免静默渲染三个 -- 让用户以为没用量
+    ensureAnyWindow(usage);
+    return usage;
 }
 
 // #endregion 格式适配 --------------------------------
@@ -358,106 +353,63 @@ async function fetchUsage(ak, sk, type) {
 /**
  * 查询火山方舟用量并返回渲染后的输出行
  *
- * 不抛出异常：出错时返回带默认标签前缀的错误字符串，便于调用方保持退出码 0
+ * 不抛出异常：出错时返回带账号标签前缀的错误字符串，便于调用方保持退出码 0
+ *
+ * 壳流程共用 runQueryUsage；ark 的 resolveType/labels/cacheKey 三个钩子把「套餐 type
+ * 要定位到账号后才能定、缓存键与错误标签又依赖 type」的差异集中表达
  *
  * @param {object} [options]
  * @param {number} [options.position=0] 账号位置（0 开始）
  * @param {"auto" | "long" | "short"} [options.display=DISPLAY.AUTO] 展示档位
  * @param {"coding" | "agent"} [options.type] 套餐类型；缺省时用账号 type，再缺省用 coding
  * @param {boolean} [options.hideOnMonthlyExhausted=false] 月度耗尽时隐藏
- * @param {boolean} [options.cache=false] 启用结果缓存（含错误负缓存）
+ * @param {boolean} [options.cache=false] 启用缓存（含错误负缓存）
  * @param {object} [options._config] 内部：已解析的 config 对象，避免重复读取
  * @returns {Promise<string>} 输出行；隐藏时为空字符串
  */
 export async function queryUsage(options = {}) {
-    const {
-        position = 0,
-        display = DISPLAY.AUTO,
-        type: optType,
-        hideOnMonthlyExhausted = false,
-        cache = false,
-    } = options;
-
     // type 同时用于负缓存键（按套餐类型区分缓存）与错误标签选择。
-    // 调用方未指定 type 时先以 CODING 兜底，解析到账号后再覆盖；
-    // 声明在 try 外，catch 写负缓存时仍可按当前已解析的 type 落键
-    let type = Object.values(TYPE).includes(optType) ? optType : TYPE.CODING;
-    // 错误标签前缀：解析到账号+type 后立即用 resolvePrefixes 覆盖默认标签；
-    // 仅 loadConfig/findAccount 这类早期错误在覆盖前抛出，回退到默认标签
-    let prefixes = DEFAULT_LABELS[KEY][type];
-    // 是否已进入网络查询阶段：仅对此后的失败写负缓存。
-    // 配置类错误（loadConfig/findAccount/缺凭据）发生在读缓存点之前，
-    // 写负缓存既不会被命中，还可能在配置于 TTL 内修复后残留旧错误
-    let reachedFetch = false;
-    try {
-        const cfg = options._config || loadConfig();
-        const account = findAccount(cfg[KEY], position);
+    // 调用方未指定 type 时先以 CODING 兜底，供 loadConfig/findAccount 这类
+    // 早期错误（还没走到 resolveType）选默认标签
+    const fallbackType = Object.values(TYPE).includes(options.type)
+        ? options.type
+        : TYPE.CODING;
 
-        // 套餐类型优先级：调用方 type > 账号 type > 默认 coding
-        // 账号 type 经 normalizeType 归一，配置写 "Agent"/"Coding" 等大小写形式不再被静默回退到 coding
-        type = Object.values(TYPE).includes(optType)
-            ? optType
-            : normalizeType(account.type, { fallback: TYPE.CODING });
-        // 先解析前缀再校验凭据：缺凭据错误也能用对的类型/账号标签渲染
-        prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY][type]);
-        const ak = (account.accessKeyId || "").trim();
-        const sk = (account.secretAccessKey || "").trim();
-        if (!ak || !sk) {
-            throw new Error("配置缺少 accessKeyId 或 secretAccessKey");
-        }
-
-        reachedFetch = true;
-        const result = await fetchUsageCached(
-            `${KEY}:${position}:${type}`,
-            cache,
-            () => fetchUsage(ak, sk, type),
-        );
-        if (result.output !== undefined) {
-            return result.output;
-        }
-        return renderWindows(
-            result.usage,
-            display,
-            prefixes,
-            hideOnMonthlyExhausted,
-        );
-    } catch (err) {
-        const output = renderErrorLine(prefixes, display, friendlyError(err));
-        if (cache && reachedFetch) {
-            writeCache(`${KEY}:${position}:${type}`, { output });
-        }
-        return output;
-    }
+    return runQueryUsage(
+        {
+            key: KEY,
+            defaultLabels: DEFAULT_LABELS[KEY][fallbackType],
+            readCredential: (account) => {
+                const ak = (account.accessKeyId || "").trim();
+                const sk = (account.secretAccessKey || "").trim();
+                // 两项都是必填凭据，任一缺失即视为未配置
+                return ak && sk ? { ak, sk } : "";
+            },
+            missingCredential: "配置缺少 accessKeyId 或 secretAccessKey",
+            // 套餐类型优先级：调用方 type > 账号 type > 默认 coding。
+            // 账号 type 经 normalizeType 归一，配置写 "Agent"/"Coding" 等大小写形式
+            // 不再被静默回退到 coding
+            resolveType: (account) =>
+                Object.values(TYPE).includes(options.type)
+                    ? options.type
+                    : normalizeType(account.type, { fallback: TYPE.CODING }),
+            labels: (account, type) =>
+                resolvePrefixes(account, DEFAULT_LABELS[KEY][type]),
+            cacheKey: (position, type) => `${KEY}:${position}:${type}`,
+            fetchUsage: ({ ak, sk }, type) => fetchPlanUsage(ak, sk, type),
+        },
+        options,
+    );
 }
 
 // #endregion 查询入口 --------------------------------
 
 // #region CLI 壳 ----------------
 
-async function main() {
-    let display = DISPLAY.AUTO;
-    let type = TYPE.CODING;
-    try {
-        const parsed = parseArgs(process.argv);
-        display = parsed.display;
-        if (Object.values(TYPE).includes(parsed.type)) {
-            type = parsed.type;
-        }
-        const output = await queryUsage(parsed);
-        if (output) {
-            process.stdout.write(output);
-        }
-    } catch (err) {
-        // queryUsage 不抛错，此处只兜底 parseArgs 失败
-        process.stdout.write(
-            renderErrorLine(DEFAULT_LABELS[KEY][type], display, err.message) +
-                "\n",
-        );
-    }
-}
-
 if (isMainModule(import.meta.url)) {
-    main();
+    await runQueryCli(queryUsage, (parsed) =>
+        DEFAULT_LABELS[KEY][normalizeType(parsed.type, { fallback: TYPE.CODING })],
+    );
 }
 
 // #endregion CLI 壳 --------------------------------

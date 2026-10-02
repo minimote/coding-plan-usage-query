@@ -15,21 +15,18 @@
  */
 
 import {
-    DISPLAY,
     KEYS,
     NO_ACTIVE_PLAN,
+    BROWSER_UA,
     DEFAULT_LABELS,
-    renderWindows,
-    renderErrorLine,
-    friendlyError,
-    loadConfig,
-    resolvePrefixes,
-    findAccount,
-    fetchUsageCached,
-    writeCache,
+    ensureAnyWindow,
+    fetchWithTimeout,
+    httpStatusError,
     isMainModule,
-    parseArgs,
-    REQUEST_TIMEOUT_MS,
+    readJsonResponse,
+    toResetSec,
+    runQueryCli,
+    runQueryUsage,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -44,9 +41,6 @@ const USAGE_URL =
 const ORIGIN = "https://platform.qianwenai.com";
 const REFERER =
     "https://platform.qianwenai.com/home/billing/subscription/token-plan-individual";
-const UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0";
 
 const PARAMS = encodeURIComponent(
     JSON.stringify({
@@ -68,16 +62,12 @@ const BODY = `product=sfm_qwen&action=BroadScopeAspnGateway&region=cn-beijing&pa
 
 // #endregion 配置常量 --------------------------------
 
-// #region 登录失效错误 ----------------
+// #region 登录失效文案 ----------------
 
-class LoginExpiredError extends Error {
-    constructor(message = "cookie 失效") {
-        super(message);
-        this.name = "LoginExpiredError";
-    }
-}
+/** cookie 失效的提示（直接以 Error 抛出，壳层透传 message，无需专门的重试子类） */
+const LOGIN_EXPIRED = "cookie 失效，请运行 login-qwen.cmd 重新登录";
 
-// #endregion 登录失效错误 --------------------------------
+// #endregion 登录失效文案 --------------------------------
 
 // #region API 调用 ----------------
 
@@ -86,11 +76,10 @@ class LoginExpiredError extends Error {
  *
  * @param {string} cookie 千问登录 cookie
  * @returns {Promise<object>}
- * @throws {LoginExpiredError} cookie 失效
- * @throws {Error} 其他错误
+ * @throws {Error} cookie 失效 / 其他错误
  */
 async function callUsageApi(cookie) {
-    const resp = await fetch(USAGE_URL, {
+    const resp = await fetchWithTimeout(USAGE_URL, {
         method: "POST",
         headers: {
             accept: "application/json, text/plain, */*",
@@ -98,10 +87,9 @@ async function callUsageApi(cookie) {
             cookie,
             origin: ORIGIN,
             referer: REFERER,
-            "user-agent": UA,
+            "user-agent": BROWSER_UA,
         },
         body: BODY,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!resp.ok) {
@@ -114,22 +102,19 @@ async function callUsageApi(cookie) {
             /* 响应非 JSON，忽略 */
         }
         throw new Error(
-            `HTTP ${resp.status}${detail ? ` (${detail})` : ""}`,
+            detail
+                ? `请求失败(HTTP ${resp.status}) (${detail})`
+                : httpStatusError(resp.status),
         );
     }
 
-    let json;
-    try {
-        json = await resp.json();
-    } catch {
-        throw new Error("响应非 JSON");
-    }
+    const json = await readJsonResponse(resp);
 
     const data = json?.data;
     if (!data || data.success === false) {
         const code = data?.errorCode || "";
         if (code.includes("NotLogined")) {
-            throw new LoginExpiredError();
+            throw new Error(LOGIN_EXPIRED);
         }
         throw new Error(data?.errorMsg || `接口返回失败: ${code}`);
     }
@@ -138,13 +123,6 @@ async function callUsageApi(cookie) {
     if (!inner) {
         // 套餐过期/未订阅时接口返回 SUCCESS 但 data 内层为空，视为无活跃套餐
         throw new Error(NO_ACTIVE_PLAN);
-    }
-    // 字段全缺失或改名时主动报错，避免静默渲染 0% 用量误导用户
-    if (
-        typeof inner.per5HourPercentage !== "number" &&
-        typeof inner.per1WeekPercentage !== "number"
-    ) {
-        throw new Error("响应结构异常，接口可能已更新");
     }
     return inner;
 }
@@ -163,15 +141,9 @@ export function parseUsageResponse(data, now = Date.now()) {
         if (typeof pct !== "number" || !Number.isFinite(pct)) {
             return null;
         }
-        const resetNum = Number(reset);
         // 不钳制：负数（重置时间已过 / 无重置如 null、空串）与 null（字段缺失）原样透传，
         // 由 renderWindows 统一显示 ↻ --，不再显示「0 分钟后重置」
-        return {
-            pct: pct * 100,
-            sec: Number.isFinite(resetNum)
-                ? Math.round((resetNum - now) / 1000)
-                : null,
-        };
+        return { pct: pct * 100, sec: toResetSec(reset, now) };
     };
     return {
         rolling: toWindow(data.per5HourPercentage, data.per5HourResetTime),
@@ -187,7 +159,10 @@ export function parseUsageResponse(data, now = Date.now()) {
  */
 async function fetchUsage(cookie) {
     const data = await callUsageApi(cookie);
-    return parseUsageResponse(data);
+    const usage = parseUsageResponse(data);
+    // 字段全缺失或改名时主动报错，避免静默渲染 0% 用量误导用户
+    ensureAnyWindow(usage);
+    return usage;
 }
 
 // #endregion API 调用 --------------------------------
@@ -207,73 +182,24 @@ async function fetchUsage(cookie) {
  * @returns {Promise<string>} 输出行
  */
 export async function queryUsage(options = {}) {
-    const { position = 0, display = DISPLAY.AUTO, cache = false } = options;
-
-    let prefixes = DEFAULT_LABELS[KEY];
-    // 是否已进入网络查询阶段：仅对此后的失败写负缓存（配置类错误不写，原因同 ark）
-    let reachedFetch = false;
-    try {
-        const cfg = options._config || loadConfig();
-        const account = findAccount(cfg[KEY], position);
-        prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
-        const cookie = (account.cookie || "").trim();
-
-        if (!cookie) {
-            return renderErrorLine(
-                prefixes,
-                display,
-                "cookie 为空，请运行 login-qwen.cmd 登录",
-            );
-        }
-
-        reachedFetch = true;
-        const result = await fetchUsageCached(`${KEY}:${position}`, cache, () =>
-            fetchUsage(cookie),
-        );
-        if (result.output !== undefined) {
-            return result.output;
-        }
-        return renderWindows(result.usage, display, prefixes);
-    } catch (err) {
-        const output = renderErrorLine(
-            prefixes,
-            display,
-            err instanceof LoginExpiredError
-                ? "cookie 失效，请运行 login-qwen.cmd 重新登录"
-                : friendlyError(err),
-        );
-        if (cache && reachedFetch) {
-            writeCache(`${KEY}:${position}`, { output });
-        }
-        return output;
-    }
+    return runQueryUsage(
+        {
+            key: KEY,
+            defaultLabels: DEFAULT_LABELS[KEY],
+            readCredential: (account) => (account.cookie || "").trim(),
+            missingCredential: "cookie 为空，请运行 login-qwen.cmd 登录",
+            fetchUsage,
+        },
+        options,
+    );
 }
 
 // #endregion 查询入口 --------------------------------
 
 // #region CLI 壳 ----------------
 
-async function main() {
-    let display = DISPLAY.AUTO;
-    try {
-        const parsed = parseArgs(process.argv);
-        display = parsed.display;
-        const output = await queryUsage({
-            position: parsed.position,
-            display: parsed.display,
-        });
-        if (output) {
-            process.stdout.write(output);
-        }
-    } catch (err) {
-        process.stdout.write(
-            renderErrorLine(DEFAULT_LABELS[KEY], display, err.message) + "\n",
-        );
-    }
-}
-
 if (isMainModule(import.meta.url)) {
-    main();
+    await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
 }
 
 // #endregion CLI 壳 --------------------------------

@@ -11,32 +11,7 @@ import {
     parseUsageResponse,
     queryUsage,
 } from "../src/query/query-usage-qwen.mjs";
-
-/**
- * 构造 JSON fetch Response 的最小 stub（callUsageApi 用 resp.json()）
- *
- * @param {object} body 响应体对象
- * @param {number} [status=200]
- */
-function makeJsonResp(body, status = 200) {
-    return {
-        status,
-        ok: status >= 200 && status < 300,
-        json: async () => body,
-        text: async () => JSON.stringify(body),
-    };
-}
-
-/** 用固定 Response stub fetch，执行 fn，结束后还原 */
-async function withFetch(resp, fn) {
-    const orig = globalThis.fetch;
-    globalThis.fetch = async () => resp;
-    try {
-        return await fn();
-    } finally {
-        globalThis.fetch = orig;
-    }
-}
+import { makeJsonResp, withFetch } from "./fetch-stub.mjs";
 
 test("parseUsageResponse: 解析 5 小时/1 周窗口百分比与重置时间", () => {
     const data = {
@@ -91,19 +66,21 @@ test("parseUsageResponse: 单字段缺失返回 null，另一窗口正常解析"
     assert.equal("monthly" in usage, false);
 });
 
-test("parseUsageResponse: 重置时间已过 / 无重置（0）则 sec 为负数，不钳 0", () => {
+test("parseUsageResponse: 重置时间已过 / 无重置（0）都不钳成 0 分钟", () => {
+    const now = 1784800000000;
     const usage = parseUsageResponse(
         {
             per5HourPercentage: 0.5,
-            per5HourResetTime: 0,
+            per5HourResetTime: 0, // 0 表示无重置时间，不是 1970 年
             per1WeekPercentage: 0,
-            per1WeekResetTime: 0,
+            per1WeekResetTime: now - 60000, // 1 分钟前，确实已过去
         },
-        1000,
+        now,
     );
-    // 原样透传负数，由 renderWindows 显示 ↻ --，不再显示「0 分钟后重置」
-    assert.equal(usage.rolling.sec, -1);
-    assert.equal(usage.weekly.sec, -1);
+    // 无重置时间归 null；真正的过去时间戳给负数。两者都由 renderWindows 显示 ↻ --，
+    // 都不会被钳成「0 分钟后重置」
+    assert.equal(usage.rolling.sec, null);
+    assert.equal(usage.weekly.sec, -60);
 });
 
 test("parseUsageResponse: 重置时间缺失（undefined / 非数字）→ sec null，由渲染层显示 ↻ --", () => {

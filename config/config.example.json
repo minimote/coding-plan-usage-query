@@ -37,16 +37,14 @@
         {
             "apiKey": "xxx",
             "shortLabel": "Go",
-            "longLabel": "OpenCodeGo",
-            "workspaceID": "wrk_xxx",
-            "authCookie": "xxx"
+            "longLabel": "OpenCode Go"
         }
     ],
     "qwen": [
         {
+            "apiKey": "xxx",
             "shortLabel": "千问",
             "longLabel": "千问",
-            "apiKey": "sk-sp-xxx",
             "cookie": "xxx"
         }
     ]

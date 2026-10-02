@@ -26,7 +26,7 @@
 | Volcengine Ark Coding Plan / Agent Plan |  Volcengine OpenAPI (AK/SK)   |
 |              Command Code               |         Internal API          |
 |              Ollama Cloud               |  HTML page parsing (cookie)   |
-|               OpenCode Go               |  HTML page parsing (cookie)   |
+|               OpenCode Go               |         Internal API          |
 |      Alibaba Cloud Qwen Token Plan      | Console internal API (cookie) |
 
 ## Preview
@@ -47,13 +47,11 @@ coding-plan-usage-query/
 │   ├── README_EN.md                       # English README
 │   └── preview.png                        # Preview image
 ├── scripts/
-│   ├── login-opencode.cmd                 # Double-click to log in to OpenCode Go on Windows
 │   ├── login-qwen.cmd                     # Double-click to log in to Qwen on Windows
 │   ├── preview.cmd                        # Double-click to preview display on Windows
 │   └── query-usage-all.cmd                # Double-click to run on Windows (UTF-8 via chcp 65001)
 ├── src/
 │   ├── login/
-│   │   ├── login-opencode.mjs             # OpenCode Go login
 │   │   └── login-qwen.mjs                 # Qwen login
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # Query all plans (parallel)
@@ -95,7 +93,7 @@ Open `config.json` and fill in credentials according to `config.schema.json`:
 - **Volcengine Ark Coding Plan / Agent Plan**: Create an AccessKey in the Volcengine console, fill in `accessKeyId` and `secretAccessKey`
 - **Command Code**: Get an API Key from the Command Code website, fill in `apiKey`
 - **Ollama Cloud**: Fill in `cookie` according to `config.schema.json`
-- **OpenCode Go**: Run `login-opencode.cmd` to auto-fill `authCookie` and `workspaceID`, or fill in manually according to `config.schema.json`
+- **OpenCode Go**: Subscribe to Go in the OpenCode Console, create an API Key, and fill it into `apiKey`
 - **Alibaba Cloud Qwen Token Plan**: Run `login-qwen.cmd` to auto-fill the `cookie`, or fill in manually according to `config.schema.json`
 
 See [Configuration](#configuration) below for details.
@@ -130,9 +128,6 @@ node src/query/query-usage-qwen.mjs
 # Log in to Qwen via browser, auto-read credentials
 node src/login/login-qwen.mjs
 
-# Log in to OpenCode Go via browser, auto-read credentials
-node src/login/login-opencode.mjs
-
 # Specify account position (0-indexed)
 node src/query/query-usage-ark.mjs --position 1
 
@@ -140,7 +135,7 @@ node src/query/query-usage-ark.mjs --position 1
 node src/tools/preview.mjs
 ```
 
-> The above commands can also be run via npm scripts: `npm run query` (smart), `npm run query:all`, `npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen` (per-plan), `npm run login:qwen`/`login:opencode` (login). To pass arguments, add `--`, e.g. `npm run query:ark -- --type agent`.
+> The above commands can also be run via npm scripts: `npm run query` (smart), `npm run query:all`, `npm run query:ark`/`query:commandcode`/`query:ollama`/`query:opencode`/`query:qwen` (per-plan), `npm run login:qwen` (login). To pass arguments, add `--`, e.g. `npm run query:ark -- --type agent`.
 
 ## Command Line Arguments
 
@@ -154,11 +149,11 @@ Query scripts support the following arguments:
 | `--hide-on-monthly-exhausted` |   -   | Hide this query's output when monthly quota is exhausted (`true`/`false`, default `false`; ignored by the smart script)                    |
 |  `--hide-on-no-active-plan`   |   -   | Hide this query's output when there is no active plan (`true`/`false`, default `false`; only effective for the `all` script)               |
 
-> Login scripts (`login-qwen`/`login-opencode`) only support the `--position`/`-p` argument. `position` ranges 0~N (N = current account count): `< N` updates an existing account, `= N` creates a new one; out-of-range prompts re-entry, and opening the browser asks for confirmation.
+> Login scripts (`login-qwen`) only support the `--position`/`-p` argument. `position` ranges 0~N (N = current account count): `< N` updates an existing account, `= N` creates a new one; out-of-range prompts re-entry, and opening the browser asks for confirmation.
 
 ## Configuration
 
-`config/config.json` is a JSON object with five keys: `ark` (Volcengine Ark accounts), `commandcode` (Command Code accounts), `ollama` (Ollama Cloud accounts), `opencode` (OpenCode Go accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported. The `apiKey` field is used by `query-usage-smart.mjs` to match the current provider; leave it empty if not using the smart script.
+`config/config.json` is a JSON object with five keys: `ark` (Volcengine Ark accounts), `commandcode` (Command Code accounts), `ollama` (Ollama Cloud accounts), `opencode` (OpenCode Go accounts), and `qwen` (Alibaba Cloud Qwen accounts). Each key holds an array of account objects. Multiple accounts are supported.
 
 ### Volcengine Ark Coding Plan / Agent Plan
 
@@ -245,20 +240,16 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
         {
             "apiKey": "xxx",
             "shortLabel": "Go",
-            "longLabel": "OpenCodeGo",
-            "workspaceID": "wrk_xxx",
-            "authCookie": "xxx"
+            "longLabel": "OpenCode Go"
         }
     ]
 }
 ```
 
-|           Field            | Required | Description                                                       |
-| :------------------------: | :------: | ----------------------------------------------------------------- |
-| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCodeGo`/`Go`                      |
-|        `authCookie`        |   Yes    | auth cookie from opencode.ai, auto-filled by `login-opencode.cmd` |
-|       `workspaceID`        |   Yes    | Workspace ID, e.g. `wrk_...`, auto-filled by `login-opencode.cmd` |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                    |
+|           Field            | Required | Description                                     |
+| :------------------------: | :------: | :---------------------------------------------- |
+| `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCode Go`/`Go`   |
+|          `apiKey`          |   Yes    | OpenCode Go API Key, same value as in CC-Switch |
 
 ### Alibaba Cloud Qwen Token Plan
 
@@ -268,7 +259,7 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
         {
             "shortLabel": "千问",
             "longLabel": "千问",
-            "apiKey": "sk-sp-xxx",
+            "apiKey": "xxx",
             "cookie": "xxx"
         }
     ]
