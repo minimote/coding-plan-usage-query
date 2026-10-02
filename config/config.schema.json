@@ -120,7 +120,7 @@
             }
         },
         "opencode": {
-            "title": "OpenCodeGo 账号列表",
+            "title": "OpenCode Go 账号列表",
             "description": "",
             "type": "array",
             "items": {
@@ -129,7 +129,7 @@
                 "properties": {
                     "longLabel": {
                         "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (OpenCodeGo)",
+                        "description": "不填则使用默认标签 (OpenCode Go)",
                         "type": "string"
                     },
                     "shortLabel": {
@@ -137,25 +137,14 @@
                         "description": "不填则使用默认标签 (Go)",
                         "type": "string"
                     },
-                    "authCookie": {
-                        "title": "Auth Cookie <必填>",
-                        "description": "- 自动获取：运行 npm run login:opencode (或双击 login-opencode.cmd)\n- 手动获取：\n    - 登录 https://opencode.ai/auth 后从浏览器 Cookie 复制 auth 的值\n    - F12 -> 应用程序(Application) -> Cookies -> opencode.ai -> auth",
-                        "type": "string"
-                    },
-                    "workspaceID": {
-                        "title": "Workspace ID <必填>",
-                        "description": "- 自动获取：运行 npm run login:opencode (或双击 login-opencode.cmd) \n- 手动获取：工作区 ID ，登录 https://opencode.ai/auth 后在网址栏获取，类似 wrk_...",
-                        "type": "string"
-                    },
                     "apiKey": {
-                        "title": "API Key [选填]",
-                        "description": "CC-Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+                        "title": "API Key <必填>",
+                        "description": "- OpenCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
                         "type": "string"
                     }
                 },
                 "required": [
-                    "authCookie",
-                    "workspaceID"
+                    "apiKey"
                 ]
             }
         },

@@ -8,10 +8,12 @@ import { createHash } from "crypto";
 import {
     parseCodingPlanResponse,
     parseAfpResponse,
+    queryUsage,
     uriEncode,
     buildCanonicalQuery,
     signVolcengine,
 } from "../src/query/query-usage-ark.mjs";
+import { makeResp, withFetch } from "./fetch-stub.mjs";
 
 test("parseCodingPlanResponse: 解析三窗口百分比与重置时间戳", () => {
     const data = {
@@ -185,3 +187,82 @@ test("signVolcengine: body 变化影响 xContentSha256", () => {
 });
 
 // #endregion 签名工具 --------------------------------
+
+// #region queryUsage 请求层集成 ----------------
+
+/** 本文件 queryUsage 用例反复用到的调用参数（coding 套餐） */
+const ARK = {
+    position: 0,
+    cache: false,
+    _config: { ark: [{ accessKeyId: "ak", secretAccessKey: "sk" }] },
+};
+
+/** 构造方舟 OpenAPI 响应体（makeResp 的 body 走 JSON.parse） */
+const arkBody = (result) =>
+    JSON.stringify({ ResponseMetadata: {}, Result: result });
+
+test("queryUsage: coding 正常响应 → 渲染三窗口", async () => {
+    const out = await withFetch(
+        makeResp({
+            status: 200,
+            body: arkBody({
+                QuotaUsage: [
+                    { Level: "session", Percent: "10", ResetTimestamp: 1784803600 },
+                    { Level: "weekly", Percent: "20", ResetTimestamp: 1784803600 },
+                    { Level: "monthly", Percent: "30", ResetTimestamp: 1784803600 },
+                ],
+            }),
+        }),
+        () => queryUsage(ARK),
+    );
+    // display auto 在非交互输出走短标签「五/周/月」
+    assert.ok(out.includes("五:"), "应渲染 5h 窗口");
+    assert.ok(out.includes("周:"), "应渲染周窗口");
+    assert.ok(out.includes("月:"), "应渲染月窗口");
+});
+
+test("queryUsage: QuotaUsage 为空 → 无活跃套餐", async () => {
+    const out = await withFetch(
+        makeResp({ status: 200, body: arkBody({ QuotaUsage: [] }) }),
+        () => queryUsage(ARK),
+    );
+    assert.ok(out.includes("无活跃套餐"), "空 tiers 应判无活跃套餐");
+});
+
+test("queryUsage: 三窗口字段全缺失 → 响应结构异常", async () => {
+    // QuotaUsage 有数据但 Level 都不命中 session/weekly/monthly → 三窗口全 null
+    // → ensureAnyWindow 抛「响应结构异常」（区分于空 tiers 的「无活跃套餐」）
+    const out = await withFetch(
+        makeResp({
+            status: 200,
+            body: arkBody({
+                QuotaUsage: [{ Level: "unknown", Percent: "10", ResetTimestamp: 0 }],
+            }),
+        }),
+        () => queryUsage(ARK),
+    );
+    assert.ok(out.includes("响应结构异常"), "三窗口全空应报结构异常");
+});
+
+test("queryUsage: HTTP 500 → 显示 HTTP 错误", async () => {
+    const out = await withFetch(
+        makeResp({ status: 500, body: "internal error" }),
+        () => queryUsage(ARK),
+    );
+    assert.ok(out.includes("HTTP 500"), "5xx 应报 HTTP 状态");
+});
+
+test("queryUsage: ResponseMetadata.Error → 业务错误冒泡", async () => {
+    const out = await withFetch(
+        makeResp({
+            status: 200,
+            body: JSON.stringify({
+                ResponseMetadata: { Error: { Code: "NotFound", Message: "no plan" } },
+            }),
+        }),
+        () => queryUsage(ARK),
+    );
+    assert.ok(out.includes("NotFound"), "业务错误 Code 应进入输出");
+});
+
+// #endregion queryUsage 请求层集成 --------------------------------

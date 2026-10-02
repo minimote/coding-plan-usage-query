@@ -1,7 +1,7 @@
 /**
  * @file 用量查询工具函数
  *
- * 包含枚举常量、参数校验、结果缓存、终端宽度适配、
+ * 包含枚举常量、参数校验、结果缓存、查询壳、终端宽度适配、
  * 倒计时格式、百分比着色、窗口渲染、配置文件、标签解析、账号匹配、
  * 参数解析等公共工具
  */
@@ -146,7 +146,7 @@ export const DEFAULT_LABELS = deepFreeze({
         short: "Ollama",
     },
     opencode: {
-        long: "OpenCodeGo",
+        long: "OpenCode Go",
         short: "Go",
     },
     qwen: {
@@ -393,8 +393,9 @@ export const REQUEST_TIMEOUT_MS = 10000;
  * usage 数据的 sec 倒计时会减去已流逝秒数，保证显示无偏差
  *
  * @param {string} key 缓存键（如 "ark:0:coding"）
- * @returns {{ output: string } | { usage: object } | null}
- *          output 为缓存的错误字符串；usage 为窗口用量数据（键按各平台实际窗口）
+ * @returns {{ error: string } | { usage: object } | null}
+ *          error 为缓存的错误**消息**（未渲染，调用方需按本次 display/标签自行渲染）；
+ *          usage 为窗口用量数据（键按各平台实际窗口）
  */
 export function readCache(key) {
     let entry;
@@ -409,14 +410,16 @@ export function readCache(key) {
     const elapsedMs = Date.now() - entry.ts;
     // 负缓存（错误）用更长的 TTL，避免故障期反复等满超时轰炸上游
     const ttl =
-        typeof entry.output === "string" ? NEG_CACHE_TTL_MS : CACHE_TTL_MS;
+        typeof entry.error === "string" ? NEG_CACHE_TTL_MS : CACHE_TTL_MS;
     if (elapsedMs < 0 || elapsedMs >= ttl) {
         return null;
     }
 
-    // 错误负缓存：TTL 内直接复用错误输出，避免故障时高频重试轰炸上游
-    if (typeof entry.output === "string") {
-        return { output: entry.output };
+    // 错误负缓存：TTL 内复用错误消息，避免故障时高频重试轰炸上游。
+    // 存消息而非渲染好的整行——命中时要用本次的 display 与账号标签重新渲染，
+    // 否则用户在 30s 窗口内会看到上一次调用的长短标签（改显示档位/改标签名都不生效）
+    if (typeof entry.error === "string") {
+        return { error: entry.error };
     }
     if (!entry.usage || typeof entry.usage !== "object") {
         return null;
@@ -433,8 +436,10 @@ export function readCache(key) {
                   sec: w.sec == null ? null : w.sec - elapsedSec,
               };
     const shifted = {};
-    for (const usageKey of Object.keys(entry.usage)) {
-        shifted[usageKey] = shift(entry.usage[usageKey]);
+    for (const [usageKey, w] of Object.entries(entry.usage)) {
+        // 只对窗口对象扣倒计时；附带的中文提示（usage.note）等非窗口键原样保留，
+        // 否则字符串会被 shift 成 {pct:undefined,sec:undefined} 而丢失
+        shifted[usageKey] = w && typeof w === "object" ? shift(w) : w;
     }
     return { usage: shifted };
 }
@@ -445,8 +450,9 @@ export function readCache(key) {
  * 读-改-写整个缓存文件；写入失败静默忽略（缓存只是优化，不影响主流程）
  *
  * @param {string} key 缓存键
- * @param {{ output?: string, usage?: object }} data
- *        output 为错误字符串（负缓存）；usage 为窗口用量数据
+ * @param {{ error?: string, usage?: object }} data
+ *        error 为错误消息（负缓存，调用方渲染前先过 friendlyError）；
+ *        usage 为窗口用量数据
  */
 export function writeCache(key, data) {
     const cachePath = getCachePath();
@@ -473,14 +479,14 @@ export function writeCache(key, data) {
 /**
  * 读缓存或执行实际查询，成功结果自动写缓存
  *
- * 命中负缓存时返回 { output }（缓存的错误行），调用方直接输出；
+ * 命中负缓存时返回 { error }（缓存的错误消息，调用方需自行渲染）；
  * 命中 usage 或实际查询成功时返回 { usage }；
  * fetchFn 抛出的异常原样透传，由调用方渲染错误行（并按需写负缓存）
  *
  * @param {string} key 缓存键
  * @param {boolean} enabled 是否启用缓存
  * @param {() => Promise<object>} fetchFn 实际查询函数，返回窗口用量数据
- * @returns {Promise<{ output: string } | { usage: object }>}
+ * @returns {Promise<{ error: string } | { usage: object }>}
  */
 export async function fetchUsageCached(key, enabled, fetchFn) {
     if (enabled) {
@@ -497,6 +503,248 @@ export async function fetchUsageCached(key, enabled, fetchFn) {
 }
 
 // #endregion 结果缓存 --------------------------------
+
+// #region 查询壳 ----------------
+
+/**
+ * 浏览器 UA（Chrome/Edge 基线）
+ *
+ * ollama / qwen / opencode-go 抓页面或调内部 JSON 端点时带上：上游边缘策略
+ * 对无 UA 的请求可能直接 403，那时与凭据失效无法区分
+ */
+export const BROWSER_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+    "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0";
+
+/** 各供应商共用的用户可见文案：抽到此处，避免 2-3 个脚本各写一份 */
+export const INVALID_API_KEY = "apiKey 无效";
+
+/**
+ * 判断失败是否为瞬时故障（值得写负缓存）
+ *
+ * 负缓存的本意是「故障期别反复等满超时轰炸上游」，只对超时/5xx 这类重试可能自愈的
+ * 错误成立。无活跃套餐、apiKey 无效、cookie 失效都要用户改配置/重新登录才解，写进去
+ * 会让用户修好后仍被旧错误挡住整整 30s
+ *
+ * @param {unknown} err 异常
+ * @returns {boolean} true 表示瞬时故障
+ */
+export function isTransientError(err) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+        return true;
+    }
+    const msg = err?.message || "";
+    return !NON_TRANSIENT_PATTERNS.some((p) => msg.includes(p));
+}
+
+/** 不该进负缓存的凭据/订阅态错误文案（含这些子串即视为需用户介入，不自动重试） */
+const NON_TRANSIENT_PATTERNS = Object.freeze([
+    NO_ACTIVE_PLAN,
+    INVALID_API_KEY,
+    "cookie 失效",
+    "cookie 已过期",
+]);
+
+/**
+ * 非 2xx 且非已知业务错误的通用提示
+ * @param {number} status
+ * @returns {string}
+ */
+export function httpStatusError(status) {
+    return `请求失败(HTTP ${status})`;
+}
+
+/**
+ * 带统一超时的 fetch
+ * @param {string} url
+ * @param {RequestInit} [init]
+ * @returns {Promise<Response>}
+ */
+export function fetchWithTimeout(url, init = {}) {
+    return fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+}
+
+/**
+ * 读取 JSON 响应体
+ * @param {Response} resp
+ * @returns {Promise<object>}
+ * @throws {Error} 响应非 JSON
+ */
+export async function readJsonResponse(resp) {
+    try {
+        return await resp.json();
+    } catch (err) {
+        // 超时由 AbortSignal.timeout 触发（DOMException name=TimeoutError），
+        // friendlyError 靠 name 识别它给出重试提示；吞成「响应非 JSON」会让用户
+        // 去排查接口而非稍后重试，故原样抛
+        if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+            throw err;
+        }
+        throw new Error("响应非 JSON");
+    }
+}
+
+/**
+ * 毫秒时间戳 → 距 now 的秒倒计时
+ *
+ * 缺失 / 非数字 / 非正值 → null，由渲染层显示 ↻ --。上游对「无重置时间」有返回 null、
+ * 空串、0 等多种形态，必须归一成 null 而非当成 1970 年——否则会算出一个巨大的负倒计时，
+ * 并让 ollama 那样的「时间戳缺失则回退解析文本时长」分支失效。
+ * 负数（重置时间已过）原样返回，不钳 0
+ *
+ * @param {unknown} ts 毫秒时间戳（number 或数字字符串）
+ * @param {number} now 当前毫秒时间戳
+ * @returns {number | null}
+ */
+export function toResetSec(ts, now) {
+    const ms = typeof ts === "number" ? ts : Number(ts);
+    if (!Number.isFinite(ms) || ms <= 0) {
+        return null;
+    }
+    return Math.round((ms - now) / 1000);
+}
+
+/**
+ * 三窗口全空且无诊断说明时抛「响应结构异常」
+ *
+ * 字段改名/接口更新时主动报错，避免静默渲染 0% 误导用户。
+ * usage.note 是供应商解析阶段附带的降级说明（如 commandcode 命中未知 planId 时
+ * 只能给出月剩余与套餐名而算不出百分比），有它在即代表响应结构可识别，不应报异常
+ * @param {{ rolling: unknown, weekly: unknown, monthly?: unknown, note?: string | null }} usage
+ */
+export function ensureAnyWindow(usage) {
+    if (!usage.rolling && !usage.weekly && !usage.monthly && !usage.note) {
+        throw new Error("响应结构异常，接口可能已更新");
+    }
+}
+
+/**
+ * 查询壳：读配置 → 定位账号 → 解析标签 → 校验凭据 → 缓存查询 → 渲染 → 负缓存
+ *
+ * 各查询脚本只有「凭据是哪个字段、请求哪个端点、怎么解析」不同，壳流程
+ * （含 reachedFetch 门控与负缓存）逐字相同，故收敛到此。
+ * ark 的缓存键与标签都依赖套餐 type（findAccount 之后才能定），故仍自带 queryUsage
+ *
+ * @param {object} spec
+ * @param {string} spec.key config 账号键名（KEYS.*）
+ * @param {object} spec.defaultLabels DEFAULT_LABELS[spec.key]
+ * @param {(account: object) => string} spec.readCredential 取凭据（已 trim）；空串表示缺失
+ * @param {string} spec.missingCredential 凭据为空时的提示（静态文案）
+ * @param {(credential: string, context?: unknown) => Promise<object>} spec.fetchUsage
+ *        context 为 spec.resolveType 的返回值（未提供该钩子时为 undefined）
+ * @param {(account: object, options: object) => unknown} [spec.resolveType]
+ *        ark 专用：套餐 type 要同时看 options.type 与账号 type，只有定位到账号后才能定，
+ *        而缓存键与错误标签都依赖它，故类型解析必须晚到 findAccount 之后
+ * @param {(position: number, context?: unknown) => string} [spec.cacheKey]
+ *        缓存键；默认 `${spec.key}:${position}`，ark 需把 type 编进键里按套餐区分缓存
+ * @param {(account: object, context?: unknown) => object} [spec.labels]
+ *        长/短标签；默认 resolvePrefixes(account, spec.defaultLabels)，
+ *        ark 需按 type 取对应套餐的默认标签
+ * @param {object} [options] queryUsage 的 options
+ * @returns {Promise<string>} 输出行；隐藏时为空字符串
+ */
+export async function runQueryUsage(spec, options = {}) {
+    const {
+        key,
+        defaultLabels,
+        readCredential,
+        missingCredential,
+        fetchUsage,
+    } = spec;
+    const {
+        position = 0,
+        display = DISPLAY.AUTO,
+        hideOnMonthlyExhausted = false,
+        cache = false,
+    } = options;
+
+    // 缓存键：默认 `${key}:${position}`，ark 通过 spec.cacheKey 把 type 编进去
+    let cacheKey = `${key}:${position}`;
+    // 错误标签前缀：解析到账号后立即用 resolvePrefixes 覆盖默认标签；
+    // 仅 loadConfig/findAccount 这类早期错误在覆盖前抛出，回退到默认标签
+    let prefixes = defaultLabels;
+    // 是否已进入网络查询阶段：仅对此后的失败写负缓存。配置类错误发生在读缓存点之前，
+    // 写负缓存既不会被命中，还可能在配置于 TTL 内修复后残留旧错误
+    let reachedFetch = false;
+    try {
+        const cfg = options._config || loadConfig();
+        const account = findAccount(cfg[key], position);
+        // ark 的套餐 type 只有定位到账号后才能定，而缓存键与错误标签都依赖它
+        const context = spec.resolveType
+            ? spec.resolveType(account, options)
+            : undefined;
+        // 先解析前缀再校验凭据：缺凭据等早期错误也能用账号标签渲染
+        prefixes = spec.labels
+            ? spec.labels(account, context)
+            : resolvePrefixes(account, defaultLabels);
+        if (spec.cacheKey) {
+            cacheKey = spec.cacheKey(position, context);
+        }
+
+        const credential = readCredential(account);
+        if (!credential) {
+            return renderErrorLine(prefixes, display, missingCredential);
+        }
+
+        reachedFetch = true;
+        const result = await fetchUsageCached(cacheKey, cache, () =>
+            fetchUsage(credential, context),
+        );
+        // 负缓存命中：缓存里存的是错误消息，用本次的 display 与账号标签重新渲染。
+        // 存渲染好的整行会让 30s 窗口内的调用一直用上一次的长短标签
+        if (result.error !== undefined) {
+            return renderErrorLine(prefixes, display, result.error);
+        }
+        // hideOnMonthlyExhausted 直接透传：renderWindows 内部已有 usage.monthly != null
+        // 守卫，无月度窗口的供应商（ollama/qwen）传了也不会隐藏，无需再按供应商标记一遍
+        return renderWindows(
+            result.usage,
+            display,
+            prefixes,
+            hideOnMonthlyExhausted,
+        );
+    } catch (err) {
+        const msg = friendlyError(err);
+        if (cache && reachedFetch && isTransientError(err)) {
+            writeCache(cacheKey, { error: msg });
+        }
+        return renderErrorLine(prefixes, display, msg);
+    }
+}
+
+/**
+ * CLI 壳：parseArgs → queryUsage → 输出
+ *
+ * @param {(options: object) => Promise<string>} queryUsage
+ * @param {object | ((parsed: object) => object)} fallbackLabels
+ *        parseArgs 失败时渲染错误行用的标签；ark 需按 --type 取对应标签，故支持函数
+ */
+export async function runQueryCli(queryUsage, fallbackLabels) {
+    let display = DISPLAY.AUTO;
+    let parsed = {};
+    try {
+        parsed = parseArgs(process.argv);
+        display = parsed.display;
+        const output = await queryUsage(parsed);
+        if (output) {
+            process.stdout.write(output);
+        }
+    } catch (err) {
+        // queryUsage 不抛错，此处只兜底 parseArgs 失败
+        const labels =
+            typeof fallbackLabels === "function"
+                ? fallbackLabels(parsed)
+                : fallbackLabels;
+        process.stdout.write(
+            renderErrorLine(labels, display, friendlyError(err)) + "\n",
+        );
+    }
+}
+
+// #endregion 查询壳 --------------------------------
 
 // #region CLI 入口判断 ----------------
 
@@ -762,13 +1010,17 @@ export function renderWindows(
         });
     const sep = `${G} | ${R}`;
     const windowsText = segs.join(sep);
+    // 供应商可在 usage.note 附一条中文说明，用于「关键数据缺一角但不值得让整行报错」
+    // 的场景（如 commandcode 的月度上限查不到）。放在 renderWindows 内而非外壳里，
+    // 是为了让 AUTO 档的 _plain 宽度估算也把它算进去，窄终端下不会溢出
+    const note = usage.note ? `${sep}⚠ ${usage.note}` : "";
 
     if (prefixes) {
         const prefix =
             display === DISPLAY.SHORT ? prefixes.short : prefixes.long;
-        return `${P}${prefix}${R}${sep}${windowsText}`;
+        return `${P}${prefix}${R}${sep}${windowsText}${note}`;
     }
-    return windowsText;
+    return windowsText + note;
 }
 
 /**

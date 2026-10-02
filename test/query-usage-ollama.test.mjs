@@ -8,7 +8,9 @@ import {
     parseUsageWindows,
     parseDurationString,
     parsePlanType,
+    queryUsage,
 } from "../src/query/query-usage-ollama.mjs";
+import { makeResp, withFetch } from "./fetch-stub.mjs";
 
 // #region parseDurationString ----------------
 
@@ -231,3 +233,28 @@ test("parsePlanType: 无 Cloud usage 区块返回 null", () => {
 });
 
 // #endregion parsePlanType --------------------------------
+
+// #region queryUsage 请求层 ----------------
+
+test("queryUsage: free 套餐判定无活跃套餐而非结构异常", async () => {
+    // 套餐类型为 free（未订阅/已过期降级）时必须走 NO_ACTIVE_PLAN：这条分支
+    // 依赖 utils 的 NO_ACTIVE_PLAN，一旦漏 import 就是 ReferenceError 而非友好提示
+    const html =
+        makePlanHtml("free") +
+        `<div><h2>Session usage</h2><p>10% used</p>` +
+        `<div class="local-time" data-time="2026-08-13T00:00:00Z">Resets in 6 days</div></div>`;
+    const out = await withFetch(
+        makeResp({ status: 200, body: html }),
+        () =>
+            queryUsage({
+                position: 0,
+                cache: false,
+                _config: { ollama: [{ cookie: "test" }] },
+            }),
+    );
+    assert.ok(out.includes("无活跃套餐"), "应判定无活跃套餐");
+    assert.ok(out.includes("free"), "应带上当前套餐类型");
+    assert.ok(!out.includes("is not defined"), "不应是 ReferenceError");
+});
+
+// #endregion queryUsage 请求层 --------------------------------

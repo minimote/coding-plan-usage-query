@@ -1,5 +1,33 @@
 # 更新日志
 
+## v2.9.0-2026.10.02
+
+### 新增
+
+- **查询壳**（`utils-query-usage.mjs` 新增 `runQueryUsage` / `runQueryCli`）：ark / commandcode / ollama / opencode-go / qwen 五脚本逐字相同的壳流程（读配置 → 定位账号 → 解析标签 → 校验凭据 → 缓存 → 渲染 → 负缓存）统一收敛，各脚本只保留差异钩子
+    - ark 缓存键与标签依赖套餐 type（定位到账号后才能定），故保留 `resolveType` / `labels` / `cacheKey` 钩子
+    - 配套共享工具：`fetchWithTimeout`、`readJsonResponse`（吞 JSON 解析错但透传超时）、`httpStatusError`、`toResetSec`（缺失 / 0 / 非法归 null 而非当成 1970）、`ensureAnyWindow`（三窗口全空且无 note 报结构异常）、`isTransientError`、`BROWSER_UA`、`INVALID_API_KEY`
+- `renderWindows` 支持 `usage.note`：供应商在关键数据缺一角但不值得整行失败时附中文说明，渲染为行尾独立的 `⚠ <说明>` 段（AUTO 档宽度估算已计入，窄终端不溢出）
+
+### 变更
+
+- **OpenCode Go 改用内部 API**（`query-usage-opencode-go.mjs`）：由抓 `/workspace/<id>/go` 页面 HTML 解析（cookie + workspaceID）改为请求 `/zen/go/v1/usage`（`apiKey` Bearer 鉴权）
+    - 错误判别改基于响应体 `error.type`：`EntitlementError` → 无 Go 订阅，`AuthError` / 401 / 3xx 跳登录页 → apiKey 无效，避免 403 限流 / WAF 被误判成无活跃套餐遭 `hideOnNoActivePlan` 静默吞掉
+    - `redirect: manual` 不跟随重定向，以便区分鉴权失败
+    - 删除 `login-opencode.mjs` / `login-opencode.cmd` / `login:opencode` script；配置 `opencode` 去掉 `authCookie` / `workspaceID`、`apiKey` 改必填，README / config.schema / config.example 同步
+- **负缓存改造**（`utils-query-usage.mjs`）：
+    - 缓存键由渲染好的整行 `output` 改存错误消息 `error`，命中时用本次 display 与账号标签重新渲染（原方案在 30s 窗口内改显示档位 / 标签名不生效）
+    - 只对瞬时故障（`isTransientError`：超时 / 5xx 等可能自愈的错误）写负缓存；无活跃套餐 / apiKey 无效 / cookie 失效需用户改配置或重新登录才解，不写，避免修好后仍被旧错误挡满 TTL
+    - `readCache` 扣倒计时只对窗口对象扣，非窗口键（note）原样保留
+- **Command Code**（`query-usage-commandcode.mjs`）：
+    - `planId` 未收录（上游新增 / 改名套餐）时不再整行失败，降级只显示月窗口并在行尾附「月剩余 + 当前套餐名」说明（5h / 周照常渲染）
+    - 月剩余大于套餐上限（`monthlyCredits` 含 `purchasedCredits`）时按数据不可信显示 `月:--`，不再算出负百分比
+    - 401 / 403 改判「apiKey 无效」（实测套餐过期是 200 + 字段全空，403 多为 key 权限 / 限流），避免被 `hideOnNoActivePlan` 静默吞掉整行
+    - `planId` 撞 `Object.prototype` 键名（`toString` 等）时不再取到函数，正确识别为未收录；`subscriptions.data` 为 null 判无活跃套餐而非结构异常
+- **单元测试扩充**：新增公共 `test/fetch-stub.mjs`（`makeResp` / `makeJsonResp` / `withFetch` / `withFetchByUrl` / `withFetchCapture`）替换各测试内联 stub
+    - ark / commandcode / ollama / opencode-go 新增 `queryUsage` 请求层集成测试，stub `globalThis.fetch` 覆盖正常响应、401 / 403 → key 无效、500 → HTTP 错误、三窗口全空 → 结构异常、EntitlementError / AuthError 优先级、3xx 跳登录、UA 携带、负缓存按本次参数重渲染等分支
+    - `utils-query-usage` 新增 `isTransientError` / `toResetSec` / `ensureAnyWindow` / `renderWindows(note)` 用例；`query-usage-qwen` 重置时间为 0 归 null 用例修正
+
 ## v2.8.0-2026.09.01
 
 ### 新增
@@ -35,7 +63,7 @@
 ### 变更
 
 - `get-actual-model.mjs` 拆分重命名为 `get-actual-model-name.mjs`（导出 `getActualModelName`），并新增配套的 `get-actual-provider-name.mjs`；README / README_EN 项目结构同步更新
-- 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display*name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符 `[-*\s]`，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp`转义，避免`.`通配任意字符误匹配、不平衡括号抛`SyntaxError` 使 smart 整体崩溃；`[xxx]`后缀提取改为只取末尾单个括号组`/\[[^\]]\*\]$/`，避免贪心吞掉靠前括号
+- 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display_name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符再匹配，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp` 转义，避免 `\.` 通配任意字符误匹配、不平衡括号抛`SyntaxError` 使 smart 整体崩溃；`[xxx]` 后缀提取改为只取末尾单个括号组，避免贪心吞掉靠前括号
 - `query-usage-smart.mjs` 重构：免费模型判断抽出纯函数 `isFreeModelName(raw)` 供单测；`matchAccountByApiKey` 从 smart 迁移到 `utils-query-usage.mjs`（按 `KEYS` 顺序遍历）并由 `matchProviderAccount` 包装（内部调 `getAPIKey`）；config 只读一次全程复用——`queryAllFallback` 与命中账号的子查询均通过 `_config` 透传已读的 cfg，避免每个账号重复 `loadConfig`
 - 倒计时渲染统一处理缺失 / 负数：`renderWindows` 中 null / NaN / Infinity / 负数 / 非数字秒数一律显示 `↻ --`，负数表示「重置时间已过或不可用」不再被钳成 0 分钟误导；`toCountdown` 增加脏数据防御，非有限数字归零；`readCache` 倒计时扣除时 null 保持 null、不再钳 0；ark / qwen / ollama / opencode-go 各查询脚本 `sec` 缺失改 null、负数原样透传，统一交给渲染层显示
 - 倒计时颜色由白（#E0E0E0）改为浅灰（#B0B0B0），与窗口标签区分又不至于抢过数据焦点

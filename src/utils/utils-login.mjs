@@ -2,7 +2,7 @@
  * @file 登录脚本公共逻辑
  *
  * Playwright 启动、持久化 profile（按 key+position 隔离）、cookie 轮询、写回 config
- * 被 login-qwen.mjs / login-opencode.mjs 复用
+ * 被 login-qwen.mjs 复用
  *
  * 交互点：position 越界重输、开浏览器前确认、浏览器关闭重试、写回兜底（不丢凭据）、
  * playwright-core 安装确认
@@ -379,7 +379,7 @@ async function writeBack(key, position, result) {
  * @param {string} options.cookieUrl 取 cookie 的 URL
  * @param {string} options.cookieName 检测登录成功的 cookie 名
  * @param {(ctx: object, page: object, cookies: Array, isClosed: () => boolean) => Promise<{configUpdate: object}>} options.onLogin
- *        登录成功后的回调，返回要写回 config 账号对象的字段（如 { cookie } 或 { authCookie, workspaceID }）
+ *        登录成功后的回调，返回要写回 config 账号对象的字段（如 { cookie }）
  * @returns {Promise<object | null>} onLogin 返回的 configUpdate；用户取消返回 null
  */
 export async function runLogin({

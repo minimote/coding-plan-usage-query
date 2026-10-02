@@ -19,21 +19,16 @@
  */
 
 import {
-    DISPLAY,
     KEYS,
     NO_ACTIVE_PLAN,
+    BROWSER_UA,
     DEFAULT_LABELS,
-    renderWindows,
-    renderErrorLine,
-    friendlyError,
-    loadConfig,
-    resolvePrefixes,
-    findAccount,
-    parseArgs,
-    fetchUsageCached,
-    writeCache,
+    fetchWithTimeout,
+    httpStatusError,
     isMainModule,
-    REQUEST_TIMEOUT_MS,
+    runQueryCli,
+    runQueryUsage,
+    toResetSec,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -41,9 +36,6 @@ import {
 const KEY = KEYS.OLLAMA;
 
 const SETTINGS_URL = "https://ollama.com/settings";
-const UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0";
 
 // #endregion 配置常量 --------------------------------
 
@@ -116,16 +108,12 @@ export function parseUsageWindows(html, now = Date.now()) {
         }
         // 优先 data-time 精确时间戳，回退到文本时长解析；两者皆无效则无倒计时（null → ↻ --）
         // 负数（重置已过）原样透传，由 renderWindows 统一显示 ↻ --，不再钳成 0 分钟
-        let sec;
-        if (w.resetMs != null && Number.isFinite(w.resetMs)) {
-            sec = Math.round((w.resetMs - now) / 1000);
-        } else if (w.reset !== undefined) {
+        let sec = toResetSec(w.resetMs, now);
+        if (sec === null && w.reset !== undefined) {
             // parseDurationString 对无法识别文本返回 0，视为无效（0 秒倒计时也无意义），
             // 归 null → ↻ --，与「两者皆无效则无倒计时」契约一致
             const parsed = parseDurationString(w.reset);
             sec = parsed > 0 ? parsed : null;
-        } else {
-            sec = null;
         }
         return { pct: parseFloat(w.pct), sec };
     };
@@ -167,14 +155,13 @@ export function parsePlanType(html) {
  * @throws {Error} cookie 失效、网络失败或页面结构变更
  */
 async function fetchUsage(sessionCookie) {
-    const resp = await fetch(SETTINGS_URL, {
+    const resp = await fetchWithTimeout(SETTINGS_URL, {
         headers: {
             Cookie: `__Secure-session=${sessionCookie}`,
             Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
-            "User-Agent": UA,
+            "User-Agent": BROWSER_UA,
         },
         redirect: "manual",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     // cookie 失效：ollama.com 会 3xx 重定向到登录页
@@ -184,7 +171,7 @@ async function fetchUsage(sessionCookie) {
         );
     }
     if (!resp.ok) {
-        throw new Error(`请求失败(HTTP ${resp.status})`);
+        throw new Error(httpStatusError(resp.status));
     }
 
     const html = await resp.text();
@@ -211,7 +198,7 @@ async function fetchUsage(sessionCookie) {
 /**
  * 查询 Ollama Cloud 用量并返回渲染后的输出行
  *
- * 不抛出异常：出错时返回带默认标签前缀的错误字符串，便于调用方保持退出码 0
+ * 不抛出异常：出错时返回带账号标签前缀的错误字符串，便于调用方保持退出码 0
  *
  * @param {object} [options]
  * @param {number} [options.position=0] 账号位置（0 开始）
@@ -221,67 +208,25 @@ async function fetchUsage(sessionCookie) {
  * @returns {Promise<string>} 输出行
  */
 export async function queryUsage(options = {}) {
-    const { position = 0, display = DISPLAY.AUTO, cache = false } = options;
-
-    let prefixes = DEFAULT_LABELS[KEY];
-    // 是否已进入网络查询阶段：仅对此后的失败写负缓存（配置类错误不写，原因同 ark）
-    let reachedFetch = false;
-    try {
-        const cfg = options._config || loadConfig();
-        const account = findAccount(cfg[KEY], position);
-        prefixes = resolvePrefixes(account, DEFAULT_LABELS[KEY]);
-        const cookie = (account.cookie || "").trim();
-
-        if (!cookie) {
-            return renderErrorLine(
-                prefixes,
-                display,
+    return runQueryUsage(
+        {
+            key: KEY,
+            defaultLabels: DEFAULT_LABELS[KEY],
+            readCredential: (account) => (account.cookie || "").trim(),
+            missingCredential:
                 "cookie 为空，请从浏览器 DevTools -> Application -> Cookies 复制 __Secure-session 填入配置",
-            );
-        }
-
-        reachedFetch = true;
-        const result = await fetchUsageCached(`${KEY}:${position}`, cache, () =>
-            fetchUsage(cookie),
-        );
-        if (result.output !== undefined) {
-            return result.output;
-        }
-        return renderWindows(result.usage, display, prefixes);
-    } catch (err) {
-        const output = renderErrorLine(prefixes, display, friendlyError(err));
-        if (cache && reachedFetch) {
-            writeCache(`${KEY}:${position}`, { output });
-        }
-        return output;
-    }
+            fetchUsage,
+        },
+        options,
+    );
 }
 
 // #endregion 查询入口 --------------------------------
 
 // #region CLI 壳 ----------------
 
-async function main() {
-    let display = DISPLAY.AUTO;
-    try {
-        const parsed = parseArgs(process.argv);
-        display = parsed.display;
-        const output = await queryUsage({
-            position: parsed.position,
-            display: parsed.display,
-        });
-        if (output) {
-            process.stdout.write(output);
-        }
-    } catch (err) {
-        process.stdout.write(
-            renderErrorLine(DEFAULT_LABELS[KEY], display, err.message) + "\n",
-        );
-    }
-}
-
 if (isMainModule(import.meta.url)) {
-    main();
+    await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
 }
 
 // #endregion CLI 壳 --------------------------------
