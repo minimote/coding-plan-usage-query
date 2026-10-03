@@ -1,7 +1,7 @@
 /**
  * @file 用量预览脚本
  *
- * 构造虚拟用量数据输出，用于预览显示效果
+ * 构造虚拟用量数据输出，每个样本按 long / short 两档各输出一行，用于预览显示效果
  */
 
 import {
@@ -37,7 +37,7 @@ const samples = [
         usage: {
             [WINDOW.ROLLING]: { pct: 89, sec: 9000 },
             [WINDOW.WEEKLY]: { pct: 100, sec: 210000 },
-            [WINDOW.MONTHLY]: { pct: 58, sec: 2600000 },
+            [WINDOW.MONTHLY]: { pct: 58, sec: 2000000 },
         },
     },
     {
@@ -67,7 +67,10 @@ const samples = [
 process.stdout.write("\n");
 
 for (const s of samples) {
-    process.stdout.write(
-        renderWindows(s.usage, DISPLAY.LONG, s.prefixes) + "\n",
-    );
+    for (const display of [DISPLAY.SHORT, DISPLAY.LONG]) {
+        process.stdout.write(
+            renderWindows(s.usage, display, s.prefixes) + "\n",
+        );
+    }
+    process.stdout.write("\n");
 }

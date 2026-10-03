@@ -81,20 +81,22 @@ export const COLORS = Object.freeze({
     /** 重置颜色 */
     RESET: "\x1b[0m",
 
+    /** 深灰 #404040（黑与灰的平均），进度条轨道背景色 */
+    DARK_GRAY: "\x1b[48;2;64;64;64m",
     /** 灰 #808080 */
     GRAY: "\x1b[38;2;128;128;128m",
     /** 浅灰 #B0B0B0（白与灰的平均），倒计时 */
     LIGHT_GRAY: "\x1b[38;2;176;176;176m",
     /** 白 #E0E0E0 */
     WHITE: "\x1b[38;2;224;224;224m",
-    /** 绿 #3FB950 */
-    GREEN: "\x1b[38;2;63;185;80m",
+    /** 绿 #6FBF5B */
+    GREEN: "\x1b[38;2;111;191;91m",
     /** Claude 橙色 #D97757 */
     ORANGE: "\x1b[38;2;217;119;87m",
-    /** 黄 #E3B341 */
-    YELLOW: "\x1b[38;2;227;179;65m",
-    /** 红 #EF4444 */
-    RED: "\x1b[38;2;239;68;68m",
+    /** 黄 #E0B33A */
+    YELLOW: "\x1b[38;2;224;179;58m",
+    /** 红 #CD3131 */
+    RED: "\x1b[38;2;205;49;49m",
     /** 薰衣草蓝紫 #B1B9F9，行前缀 */
     PREFIX: "\x1b[38;2;177;185;249m",
 });
@@ -840,6 +842,62 @@ export function pctSegment(pct) {
     return `${color}${formatPct(pct)}%${COLORS.RESET}`;
 }
 
+/** 进度条格数与总档数（6 格 × 每格 8 分格 = 48 档） */
+const BAR_CELLS = 6;
+const BAR_STEPS = BAR_CELLS * 8;
+
+/** 1/8 … 8/8 格 */
+const BAR_BLOCKS = ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"];
+
+/** 空档占位字符，1 列宽，仅 plain 模式用 */
+const BAR_EMPTY_PLAIN = "·";
+
+/**
+ * 展示用百分比 → 填充档数（0..48）
+ *
+ * 端点保护：只有 0 全空、100 全满，其余一律钳在 1..47 档（0.1% 也画 1/8 格，
+ * 99.9% 也留 1/8 格空）
+ *
+ * @param {number} shown formatPct 的结果（0-100）
+ * @returns {number} 填充档数
+ */
+function barSteps(shown) {
+    if (shown >= 100) {
+        return BAR_STEPS;
+    }
+    if (shown <= 0) {
+        return 0;
+    }
+    return Math.min(
+        BAR_STEPS - 1,
+        Math.max(1, Math.round((shown / 100) * BAR_STEPS)),
+    );
+}
+
+/**
+ * 渲染 6 格进度条（单档 100/48 ≈ 2.08%）
+ *
+ * 前景 = 档位色，与百分比数字同为 pctColorCode(shown)；背景 = 深灰轨道，
+ * 空档用空格让轨道透出，条形总长始终可见
+ *
+ * @param {number} pct 原始百分比
+ * @param {boolean} [plain=false] 无色版，空档用等宽占位字符，供测宽用
+ * @returns {string} 6 列宽的进度条
+ */
+export function bar(pct, plain = false) {
+    const shown = formatPct(pct);
+    const steps = barSteps(shown);
+    // COLORS 常量形如 "\x1b[<参数>m"，去掉首尾后拼成前景+背景一条 SGR
+    const fg = pctColorCode(shown).slice(2, -1);
+    const bg = COLORS.DARK_GRAY.slice(2, -1);
+    let out = plain ? "" : `\x1b[${fg};${bg}m`;
+    for (let i = 0; i < BAR_CELLS; i++) {
+        const n = Math.min(8, Math.max(0, steps - i * 8));
+        out += n === 0 ? (plain ? BAR_EMPTY_PLAIN : " ") : BAR_BLOCKS[n - 1];
+    }
+    return out + (plain ? "" : COLORS.RESET);
+}
+
 /**
  * 秒数 → 人类可读倒计时
  *
@@ -923,6 +981,7 @@ function getVisibleWidth(s) {
  *
  * 按 WINDOW 定义顺序遍历 usage 中存在的窗口：不含某键则不输出（平台无此窗口）；
  * 键存在但值为 null 时显示 "标签:--"（数据缺失）；非 null 时渲染百分比段和倒计时
+ * long 档在百分比前插 6 格进度条（见 bar），short 档不带条（窄终端兜底档）；
  * 窗口标签用白色（#E0E0E0），百分比按 pct 分档着色（绿/黄/橙/红）；null 窗口标签同样用白；
  * 倒计时用浅灰（#B0B0B0），与标签区分又不至于抢过数据焦点；分隔符 | 用灰（#808080）降噪，凸显数据
  * 百分比经 formatPct 归一到 0–100 整数（两端做端点保护，见 formatPct），秒数限制为 ≥0
@@ -998,15 +1057,18 @@ export function renderWindows(
             }
             const pct = formatPct(item.pct);
             const label = `${W}${WINDOW_LABELS[key][mode]}:${R}`;
+            // 进度条只挂 long 档，short 是窄终端兜底档
+            const barSeg =
+                display === DISPLAY.SHORT ? "" : bar(pct, _plain) + " ";
             const pctSeg = _plain ? `${pct}%` : pctSegment(pct);
             // 秒数归一：null/undefined → null，数字字符串（如 "3600"）→ 3600
             const sec = item.sec == null ? null : Number(item.sec);
             // 无有效倒计时（null / NaN / Infinity / 负数 / 非数字）→ 倒计时位显示 --
             // 负数表示「重置时间已过或不可用」，不再被钳成 0 分钟误导
             if (!Number.isFinite(sec) || sec < 0) {
-                return `${label}${pctSeg} ${G}↻ ${LG}--${R}`;
+                return `${label}${barSeg}${pctSeg} ${G}↻ ${LG}--${R}`;
             }
-            return `${label}${pctSeg} ${G}↻ ${LG}${toCountdown(Math.round(sec), display)}${R}`;
+            return `${label}${barSeg}${pctSeg} ${G}↻ ${LG}${toCountdown(Math.round(sec), display)}${R}`;
         });
     const sep = `${G} | ${R}`;
     const windowsText = segs.join(sep);
