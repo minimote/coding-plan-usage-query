@@ -10,6 +10,7 @@ import {
     KEYS,
     pctColorCode,
     pctSegment,
+    bar,
     formatPct,
     toCountdown,
     renderWindows,
@@ -111,6 +112,49 @@ test("pctSegment: 渲染着色百分比，四舍五入到整数", () => {
 test("pctSegment: 99.7% 渲染为 99% 而非 100%", () => {
     assert.ok(pctSegment(99.7).includes("99%"));
     assert.ok(pctSegment(100).includes("100%"));
+});
+
+/** 去掉 ANSI 颜色码，便于断言条的字符形态 */
+const stripAnsi = (s) => s.replace(/\x1b\[[\d;]*m/g, "");
+
+test("bar: 6 格宽，按 1/8 分格填充", () => {
+    assert.equal(stripAnsi(bar(0)), "      ");
+    assert.equal(stripAnsi(bar(25)), "█▌    "); // 12/48 档 = 1 整格 + 4/8
+    assert.equal(stripAnsi(bar(50)), "███   "); // 24/48 档 = 3 整格
+    assert.equal(stripAnsi(bar(100)), "██████");
+});
+
+test("bar: 端点保护，只有真正未用 / 用尽才全空全满", () => {
+    assert.equal(stripAnsi(bar(0.1)), "▏     ");
+    assert.equal(stripAnsi(bar(0.4)), "▏     ");
+    assert.equal(stripAnsi(bar(99.6)), "█████▉");
+    assert.equal(stripAnsi(bar(99.9)), "█████▉");
+    assert.equal(stripAnsi(bar(0)), "      ");
+    assert.equal(stripAnsi(bar(-5)), "      ");
+    assert.equal(stripAnsi(bar(100)), "██████");
+    assert.equal(stripAnsi(bar(150)), "██████");
+});
+
+test("bar: 脏数据按 0% 处理，不渲染出 undefined", () => {
+    for (const v of [NaN, undefined, null, "abc", {}]) {
+        assert.equal(stripAnsi(bar(v)), "      ");
+    }
+});
+
+test("bar: 前景色与百分比数字同色", () => {
+    const fgOf = (seq) => seq.match(/\x1b\[([\d;]+)m/)[1];
+    for (const p of [0, 0.4, 42.4, 59.6, 60, 79.6, 80, 99.6, 100, 150]) {
+        // bar 的 SGR 是「前景;背景」合成，取背景前的部分与数字比
+        const barFg = fgOf(bar(p)).split(";48;2;")[0];
+        assert.equal(barFg, fgOf(pctSegment(p)), `pct=${p} 条与数字应同色`);
+    }
+});
+
+test("bar: plain 模式无 ANSI，恒为 6 列", () => {
+    assert.equal(bar(50, true), "███···");
+    assert.equal(bar(0, true), "······");
+    assert.equal(bar(100, true), "██████");
+    assert.ok(!bar(50, true).includes("\x1b"));
 });
 
 test("toCountdown: long 档中文倒计时", () => {
@@ -286,6 +330,51 @@ test("renderWindows: note 不影响 hideOnMonthlyExhausted 的隐藏", () => {
         note: "不该出现",
     };
     assert.equal(renderWindows(usage, DISPLAY.SHORT, null, true), "");
+});
+
+test("renderWindows: long 档在百分比前插进度条，short 档不带", () => {
+    const usage = {
+        rolling: { pct: 50, sec: 1800 },
+        weekly: { pct: 100, sec: 500000 },
+    };
+    const prefixes = { long: "长标签", short: "短" };
+    const longOut = stripAnsi(renderWindows(usage, DISPLAY.LONG, prefixes));
+    assert.ok(longOut.includes("五小时:███    50%"));
+    assert.ok(longOut.includes("每周:██████ 100%"));
+    const shortOut = stripAnsi(renderWindows(usage, DISPLAY.SHORT, prefixes));
+    assert.ok(shortOut.includes("五:50%"));
+    assert.ok(!shortOut.includes("█"));
+});
+
+test("renderWindows: 窗口数据为 null 时不画条", () => {
+    const out = stripAnsi(renderWindows({ rolling: null }, DISPLAY.LONG));
+    assert.ok(out.includes("五小时:--"));
+    assert.ok(!out.includes("█"));
+});
+
+test("renderWindows: 倒计时位为 -- 时仍带条", () => {
+    const out = stripAnsi(
+        renderWindows({ rolling: { pct: 50, sec: null } }, DISPLAY.LONG),
+    );
+    assert.ok(out.includes("五小时:███    50% ↻ --"));
+});
+
+test("renderWindows: AUTO 档测宽计入进度条", () => {
+    const usage = {
+        rolling: { pct: 50, sec: 1800 },
+        weekly: { pct: 100, sec: 500000 },
+        monthly: { pct: 30, sec: 2000000 },
+    };
+    const prefixes = { long: "长标签", short: "短" };
+    // 90 列放得下无条的 long，放不下带条的 long（带条测宽 96 + 5 间距）
+    const restore = stubTermWidth(90);
+    try {
+        const out = stripAnsi(renderWindows(usage, DISPLAY.AUTO, prefixes));
+        assert.ok(out.includes("五:50%"));
+        assert.ok(!out.includes("█"));
+    } finally {
+        restore();
+    }
 });
 
 test("renderWindows: AUTO 档窄终端回退 SHORT", () => {

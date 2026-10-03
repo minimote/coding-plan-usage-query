@@ -33,6 +33,8 @@
 
 ![Preview](docs/preview.png)
 
+> 每个套餐上下两行：上为 `short` 档、下为 `long` 档。`long` 档在百分比前带 6 格进度条（每格 8 分格，精度 1/48，约 2%），条与百分比数字同色：0–59% 绿、60–79% 黄、80–99% 橙、100% 红。
+>
 > 运行 `scripts/preview.cmd`（或 `node src/tools/preview.mjs`）可用模拟数据预览显示效果。
 
 ## 项目结构

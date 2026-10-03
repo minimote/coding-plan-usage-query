@@ -33,6 +33,8 @@
 
 ![Preview](preview.png)
 
+> Each plan takes two lines: `short` on top, `long` below. The `long` mode prefixes every percentage with a 6-cell progress bar (8 sub-cells per cell, 1/48 precision, ~2%), colored the same as the number: 0–59% green, 60–79% yellow, 80–99% orange, 100% red.
+>
 > Run `scripts/preview.cmd` (or `node src/tools/preview.mjs`) to preview the display using mock data.
 
 ## Project Structure
