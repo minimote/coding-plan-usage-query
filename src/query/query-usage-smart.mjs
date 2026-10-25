@@ -20,6 +20,7 @@ import {
     ERROR_MARK,
     matchProviderAccount,
 } from "../utils/utils-query-usage.mjs";
+import { getAppMode, MODE } from "../utils/utils-cc-switch.mjs";
 import { queryAll, QUERY_FNS } from "./query-usage-all.mjs";
 import { getActualModelName } from "../tools/get-actual-model-name.mjs";
 
@@ -86,7 +87,13 @@ async function queryAllFallback(display, cfg) {
 async function main() {
     const { display } = parseArgs(process.argv);
 
-    // 首先判断模型名是否含 free（忽略大小写）：免费模型直接查询全部账号
+    // 聚合模式没有唯一供应商（成员模型按请求分发），直接查询 config 里全部账号
+    if (getAppMode() === MODE.STACK) {
+        await queryAllFallback(display);
+        return;
+    }
+
+    // 判断模型名是否含 free（忽略大小写）：免费模型直接查询全部账号
     if (isFreeModel()) {
         await queryAllFallback(display);
         return;

@@ -64,6 +64,7 @@ coding-plan-usage-query/
 │   │   ├── query-usage-qwen.mjs           # 千问 Token Plan 用量查询
 │   │   └── query-usage-smart.mjs          # 智能查询：根据实际使用的套餐自动匹配（带缓存）
 │   ├── tools/
+│   │   ├── colorful-git-changes.mjs       # Git 改动文件数与增删行数着色
 │   │   ├── colorful-tokens.mjs            # 上下文 token 数按阈值着色
 │   │   ├── get-actual-model-name.mjs      # 获取实际模型名称
 │   │   ├── get-actual-provider-name.mjs   # 获取实际供应商名称
@@ -278,7 +279,7 @@ node src/tools/preview.mjs
 
 `query-usage-smart.mjs` 的工作流程：
 
-1. 优先读取 [CC Launcher](#相关项目) 注入的 `CC_SWITCH_PROVIDER_ID` 环境变量反查数据库获取实际供应商，查无此行或数据库读取失败时降级到 `~/.cc-switch/settings.json` 的 `currentProviderClaude`
+1. 判定当前模式：注入了 [CC Launcher](#相关项目) 的 `CC_SWITCH_PROVIDER_ID`、或客户端 `ANTHROPIC_BASE_URL` 不是本地地址时，按直连实例处理——优先用 `CC_SWITCH_PROVIDER_ID` 反查数据库，查无此行或数据库读取失败时降级到 `~/.cc-switch/settings.json` 的 `currentProviderClaude`。否则读 `~/.cc-switch/live-state.json`：聚合模式（`stack.enabled`）没有唯一供应商，直接查询 `config.json` 中全部账号；路由模式用其中的 `proxy_route` 反查数据库；直连模式同样回退到上面两个来源
 2. 获取当前供应商的 API Key（优先环境变量 `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`，代理模式回退查询 `~/.cc-switch/cc-switch.db`）
 3. 在 `config.json` 中匹配 `apiKey` 字段相同的账号
 4. 进程内调用对应查询函数获取用量
@@ -286,6 +287,7 @@ node src/tools/preview.mjs
 说明：
 
 - 检测到使用免费模型或匹配不到账号时，显示全部账号用量
+- 聚合模式下没有唯一供应商，直接显示 `config.json` 中全部账号的用量
 - 查询结果缓存 5 秒，错误结果缓存 30 秒（`tmp/cache-usage.json`），减少高频刷新时的 API 请求
 - 手动运行子脚本时不使用缓存
 

@@ -64,6 +64,7 @@ coding-plan-usage-query/
 │   │   ├── query-usage-qwen.mjs           # Qwen Token Plan query
 │   │   └── query-usage-smart.mjs          # Smart query: auto-match by current plan (with cache)
 │   ├── tools/
+│   │   ├── colorful-git-changes.mjs       # Colorize changed-file count and line diff
 │   │   ├── colorful-tokens.mjs            # Colorize context tokens by threshold
 │   │   ├── get-actual-model-name.mjs      # Get actual model name
 │   │   ├── get-actual-provider-name.mjs   # Get actual provider name
@@ -278,7 +279,7 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 `query-usage-smart.mjs` workflow:
 
-1. Prioritize the `CC_SWITCH_PROVIDER_ID` env var injected by [CC Launcher](#related-projects) to look up the actual provider in the database; fall back to `currentProviderClaude` from `~/.cc-switch/settings.json` when the id is missing, not found, or the database read fails
+1. Determine the mode first: when the `CC_SWITCH_PROVIDER_ID` env var from [CC Launcher](#related-projects) is set, or the client's `ANTHROPIC_BASE_URL` is not a local address, treat it as a direct instance — prioritize `CC_SWITCH_PROVIDER_ID` and fall back to `currentProviderClaude` from `~/.cc-switch/settings.json` when the id is missing, not found, or the database read fails. Otherwise read `~/.cc-switch/live-state.json`: Aggregation mode (`stack.enabled`) has no single provider, so every account in `config.json` is queried; Routing mode looks up its `proxy_route` in the database; Direct mode falls back to the two sources above
 2. Get the current provider's API Key (prioritize env vars `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`; fall back to `~/.cc-switch/cc-switch.db` in proxy mode)
 3. Match the account with the same `apiKey` in `config.json`
 4. Call the corresponding query function in-process
@@ -286,6 +287,7 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 Notes:
 
 - When a free model is detected or no matching account is found, all accounts are displayed instead
+- Aggregation mode has no single provider, so all accounts in `config.json` are displayed
 - Query results are cached for 5 seconds, and error results for 30 seconds (`tmp/cache-usage.json`), to reduce API calls under frequent refreshes
 - Running the sub-scripts manually does not use the cache
 

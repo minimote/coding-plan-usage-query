@@ -1,5 +1,24 @@
 # 更新日志
 
+## v2.11.0-2026.10.25
+
+### 新增
+
+- 新增 Git 改动着色工具 `src/tools/colorful-git-changes.mjs`：取 ccstatusline 传入的仓库路径，输出 `Δ2 +48-289`（文件数 / 增 / 删）；未跟踪文件计入文件数并统计行数，超 2MB 或含 NUL 只计文件数；无改动或非仓库不输出，git 读失败输出 `⚠`。测试覆盖解析、空仓库、二进制等分支
+- 新增三模式判定 `getAppMode`（配套导出 `MODE`、`STACK_DISPLAY_NAME`）：读 `~/.cc-switch/live-state.json` 区分直连 / 路由 / 聚合；注入 `CC_SWITCH_PROVIDER_ID` 或客户端 base_url 非本机时按直连处理
+- 新增聚合模式支持：smart 直接查询 `config.json` 全部账号，供应商名固定显示「聚合」；由 `query-usage-smart-stack.test.mjs` 子进程验证
+
+### 优化
+
+- 优化代理模式供应商判定：路由 / 聚合改读 live-state 的 `proxy_route`，与直连指针互相独立，缺失或查无此行时降级直连指针
+- `getCurrentProviderRow` 与 `getActualProviderName` 共用同一份 live-state 快照，避免重复读取与状态漂移；聚合模式少读一次数据库和配置
+- README / README_EN 同步三模式判定流程与目录结构
+- 扩充 `utils-cc-switch-*` 两份测试，覆盖 `attached=false`、live-state 损坏、`proxy_route` 缺失等分支
+
+### 修复
+
+- 修复测试受真实配置干扰：继承的 `ANTHROPIC_BASE_URL` 或 `~/.cc-switch` 路由状态会让直连用例命中真实数据库，现统一重定向到临时文件
+
 ## v2.10.0-2026.10.03
 
 ### 新增

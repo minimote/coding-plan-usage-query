@@ -102,16 +102,18 @@ export const COLORS = Object.freeze({
 });
 
 /**
- * config.json 的绝对路径
+ * config.json 的绝对路径（可用 CC_CONFIG_PATH 覆盖，供测试使用）
  * @type {string}
  */
-export const CONFIG_PATH = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "config",
-    "config.json",
-);
+export const CONFIG_PATH =
+    process.env.CC_CONFIG_PATH ||
+    join(
+        dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "..",
+        "config",
+        "config.json",
+    );
 
 /**
  * 各应用默认长/短标签

@@ -3,6 +3,11 @@
  *
  * 从 ccstatusline-zh 的标准输入接收 JSON，取 context 原始 token 数按阈值着色输出
  * 颜色复用 utils-query-usage.mjs 的 COLORS，与用量查询状态栏配色统一
+ *
+ * 用法:
+ *   node colorful-tokens.mjs
+ *
+ * 也可被 import 后调用 renderFromRaw(raw) / colorForTokens(total)
  */
 
 import { readFileSync } from "fs";

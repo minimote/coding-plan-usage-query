@@ -817,8 +817,18 @@ test("matchProviderAccount: getAPIKey 抛错（settings 缺失）时异常冒泡
     // 查全部账号，需冒泡由 smart 的 main().catch 打印 ❌ 诊断；免费路径已由 isFreeModel 先判
     const prevAuth = process.env.ANTHROPIC_AUTH_TOKEN;
     const prevSettings = process.env.CC_SWITCH_SETTINGS_PATH;
+    const prevLiveState = process.env.CC_SWITCH_LIVE_STATE_PATH;
+    const prevLauncher = process.env.CC_SWITCH_PROVIDER_ID;
+    const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
+    const prevClaudeSettings = process.env.CC_CLAUDE_SETTINGS_PATH;
     delete process.env.ANTHROPIC_AUTH_TOKEN;
+    delete process.env.CC_SWITCH_PROVIDER_ID;
+    delete process.env.ANTHROPIC_BASE_URL;
     process.env.CC_SWITCH_SETTINGS_PATH = "__nonexistent_settings__";
+    // live-state / 客户端 settings 也指向不存在文件：否则代理模式或 cc-launcher 会话会
+    // 先命中真实的 ~/.cc-switch 路由供应商 / 数据库
+    process.env.CC_SWITCH_LIVE_STATE_PATH = "__nonexistent_live_state__";
+    process.env.CC_CLAUDE_SETTINGS_PATH = "__nonexistent_claude_settings__";
     try {
         await assert.rejects(
             matchProviderAccount({ qwen: [{ apiKey: "x" }] }),
@@ -829,6 +839,17 @@ test("matchProviderAccount: getAPIKey 抛错（settings 缺失）时异常冒泡
         else process.env.ANTHROPIC_AUTH_TOKEN = prevAuth;
         if (prevSettings === undefined) delete process.env.CC_SWITCH_SETTINGS_PATH;
         else process.env.CC_SWITCH_SETTINGS_PATH = prevSettings;
+        if (prevLiveState === undefined)
+            delete process.env.CC_SWITCH_LIVE_STATE_PATH;
+        else process.env.CC_SWITCH_LIVE_STATE_PATH = prevLiveState;
+        if (prevLauncher === undefined)
+            delete process.env.CC_SWITCH_PROVIDER_ID;
+        else process.env.CC_SWITCH_PROVIDER_ID = prevLauncher;
+        if (prevBaseUrl === undefined) delete process.env.ANTHROPIC_BASE_URL;
+        else process.env.ANTHROPIC_BASE_URL = prevBaseUrl;
+        if (prevClaudeSettings === undefined)
+            delete process.env.CC_CLAUDE_SETTINGS_PATH;
+        else process.env.CC_CLAUDE_SETTINGS_PATH = prevClaudeSettings;
     }
 });
 

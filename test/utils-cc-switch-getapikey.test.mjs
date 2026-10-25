@@ -24,9 +24,16 @@ test.before(() => {
         JSON.stringify({ currentProviderClaude: "test-provider" }),
     );
     process.env.CC_SWITCH_SETTINGS_PATH = join(tmpDir, "settings.json");
+    // live-state / 客户端 settings 指向不存在文件、清掉继承的 base_url：一律按直连处理，
+    // 不读用户真实的 ~/.cc-switch 与 ~/.claude
+    process.env.CC_SWITCH_LIVE_STATE_PATH = join(tmpDir, "live-state.json");
+    process.env.CC_CLAUDE_SETTINGS_PATH = join(tmpDir, "claude-settings.json");
+    delete process.env.ANTHROPIC_BASE_URL;
 });
 test.after(() => {
     delete process.env.CC_SWITCH_SETTINGS_PATH;
+    delete process.env.CC_SWITCH_LIVE_STATE_PATH;
+    delete process.env.CC_CLAUDE_SETTINGS_PATH;
     rmSync(tmpDir, { recursive: true, force: true });
 });
 
