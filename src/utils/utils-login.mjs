@@ -250,7 +250,7 @@ async function runBrowserFlow(
             await page.goto(loginUrl);
         } catch (err) {
             if (isBrowserClosedError(err)) {
-                throw new Error("浏览器被关闭");
+                throw new Error("浏览器被关闭", { cause: err });
             }
             throw err;
         }
@@ -282,7 +282,7 @@ async function runBrowserFlow(
             result = await onLogin(ctx, page, cookies, () => browserClosed);
         } catch (err) {
             if (isBrowserClosedError(err)) {
-                throw new Error("浏览器被关闭");
+                throw new Error("浏览器被关闭", { cause: err });
             }
             throw err;
         }
@@ -290,7 +290,9 @@ async function runBrowserFlow(
         // 浏览器可能已被用户关闭，close() 忽略被关闭的错误
         try {
             await ctx.close();
-        } catch {}
+        } catch {
+            // 忽略：此时浏览器通常已被用户关闭
+        }
     }
     return result;
 }
@@ -390,7 +392,6 @@ export async function runLogin({
     cookieName,
     onLogin,
 }) {
-    let action = "更新已有账号";
     try {
         const cfg = loadConfig();
         const accounts = Array.isArray(cfg[key]) ? cfg[key] : [];
@@ -402,7 +403,7 @@ export async function runLogin({
             len,
             position,
         );
-        action = willCreate ? "新建账号" : "更新已有账号";
+        const action = willCreate ? "新建账号" : "更新已有账号";
 
         const chromium = await loadChromium();
 

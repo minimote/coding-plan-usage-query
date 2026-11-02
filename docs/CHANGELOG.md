@@ -1,5 +1,27 @@
 # 更新日志
 
+## v2.12.0-2026.11.02
+
+> 18 个文件变更，1371 行插入，284 行删除
+
+### 新增
+
+- 新增 ESLint 配置（`eslint.config.js`）与 `npm run lint` script，配套 `@eslint/js` / `globals` devDependencies；测试目录关闭 `no-control-regex`（匹配 ANSI 转义码需要），解构丢弃的变量统一 `_` 前缀
+- 新增 GitHub Actions CI（`.github/workflows/ci.yml`）：push 到 master / PR / 手动触发，lint 与 test 两个 job，Node 26
+
+### 优化
+
+- **CommandCode 月额度改按已花金额反推**（`query-usage-commandcode.mjs`）：新增并行请求 `/alpha/usage/summary` 取本周期 `totalCost`，月用量 = `totalCost / (totalCost + monthlyCredits)`，删除 `PLAN_MONTHLY_CREDITS` planId 查表——上游新增 / 改名套餐时月窗口不再失效
+    - `freeCredits` / `purchasedCredits` 不计入分母（归属未验证，避免重复计数）
+    - summary 请求失败或 `totalCost` 无效时月窗口降级为 `月:--`，行尾附 `⚠ 月已花金额获取失败` / `⚠ 月剩余额度获取失败`，5h / 周不受影响
+- **按量付费账号**（`windowLimits.limited === false`）：不写 5h / 周键而非置 null，不再渲染出 `五:-- 周:--`；`limited` 缺失时仍照常展示，避免改字段名后窗口静默消失
+- **`ensureAnyWindow` 不再认 note**：三窗口全空即报「响应结构异常」，降级说明只能解释单个窗口缺失，不能证明响应结构正常
+- **Git 改动着色**：去掉文件数与增删之间的空格，`Δ2 +48-289` → `Δ2+48-289`
+- 统一命名 Command Code → CommandCode（README / README_EN / config.schema / 代码注释 / package 描述）
+- 错误包装补 `cause`（`utils-query-usage` / `utils-cc-switch` / `utils-login`），保留原始异常
+- `query-usage-smart-stack.test.mjs` 子进程加 30s 超时，避免测试挂死
+- 清理未使用的导入与变量（`query-usage-ark` 的 `isTransientError`、`utils-login` 的 `action`），空 `catch` 补注释
+
 ## v2.11.0-2026.10.25
 
 ### 新增
@@ -26,7 +48,7 @@
 - **`long` 档进度条**（`utils-query-usage.mjs` 新增 `bar`）：`--display long` 时在每个窗口的百分比前增加 6 格进度条（精度 1/48，约 2%），与百分比数字同色，背景为新增的 `COLORS.DARK_GRAY` 轨道；端点保护与 `formatPct` 对齐，只有真正 0% 全空、100% 全满，其余钳在 1–47 档。`short` 档不带条，`auto` 档把条计入测宽，放不下时回退 `short`
 - 单元测试：`bar` 的分格填充 / 端点保护 / 脏数据 / 与数字同色，`renderWindows` 的 long 带条、short 不带条、null 窗口不画条
 
-### 变更
+### 优化
 
 - **四档配色调整**（`COLORS`）：绿 `#3FB950` → `#6FBF5B`、黄 `#E3B341` → `#E0B33A`、红 `#EF4444` → `#CD3131`
 - **预览脚本**（`src/tools/preview.mjs`）：每个样本改为 `short` / `long` 两行，样本间空一行
@@ -40,7 +62,7 @@
     - 配套共享工具：`fetchWithTimeout`、`readJsonResponse`（吞 JSON 解析错但透传超时）、`httpStatusError`、`toResetSec`（缺失 / 0 / 非法归 null 而非当成 1970）、`ensureAnyWindow`（三窗口全空且无 note 报结构异常）、`isTransientError`、`BROWSER_UA`、`INVALID_API_KEY`
 - `renderWindows` 支持 `usage.note`：供应商在关键数据缺一角但不值得整行失败时附中文说明，渲染为行尾独立的 `⚠ <说明>` 段（AUTO 档宽度估算已计入，窄终端不溢出）
 
-### 变更
+### 优化
 
 - **OpenCode Go 改用内部 API**（`query-usage-opencode-go.mjs`）：由抓 `/workspace/<id>/go` 页面 HTML 解析（cookie + workspaceID）改为请求 `/zen/go/v1/usage`（`apiKey` Bearer 鉴权）
     - 错误判别改基于响应体 `error.type`：`EntitlementError` → 无 Go 订阅，`AuthError` / 401 / 3xx 跳登录页 → apiKey 无效，避免 403 限流 / WAF 被误判成无活跃套餐遭 `hideOnNoActivePlan` 静默吞掉
@@ -50,9 +72,9 @@
     - 缓存键由渲染好的整行 `output` 改存错误消息 `error`，命中时用本次 display 与账号标签重新渲染（原方案在 30s 窗口内改显示档位 / 标签名不生效）
     - 只对瞬时故障（`isTransientError`：超时 / 5xx 等可能自愈的错误）写负缓存；无活跃套餐 / apiKey 无效 / cookie 失效需用户改配置或重新登录才解，不写，避免修好后仍被旧错误挡满 TTL
     - `readCache` 扣倒计时只对窗口对象扣，非窗口键（note）原样保留
-- **Command Code**（`query-usage-commandcode.mjs`）：
+- **CommandCode**（`query-usage-commandcode.mjs`）：
     - `planId` 未收录（上游新增 / 改名套餐）时不再整行失败，降级只显示月窗口并在行尾附「月剩余 + 当前套餐名」说明（5h / 周照常渲染）
-    - 月剩余大于套餐上限（`monthlyCredits` 含 `purchasedCredits`）时按数据不可信显示 `月:--`，不再算出负百分比
+    - 月剩余大于套餐上限时按数据不可信显示 `月:--`，不再算出负百分比
     - 401 / 403 改判「apiKey 无效」（实测套餐过期是 200 + 字段全空，403 多为 key 权限 / 限流），避免被 `hideOnNoActivePlan` 静默吞掉整行
     - `planId` 撞 `Object.prototype` 键名（`toString` 等）时不再取到函数，正确识别为未收录；`subscriptions.data` 为 null 判无活跃套餐而非结构异常
 - **单元测试扩充**：新增公共 `test/fetch-stub.mjs`（`makeResp` / `makeJsonResp` / `withFetch` / `withFetchByUrl` / `withFetchCapture`）替换各测试内联 stub
@@ -63,7 +85,7 @@
 
 ### 新增
 
-- Command Code 用量查询（`src/query/query-usage-commandcode.mjs`）：读取 `config.json` 的 `commandcode` 凭据，并行请求 `/alpha/billing/credits`（五小时 / 周窗口用量来自 `windowLimits`、月剩余额度来自 `monthlyCredits`）与 `/alpha/billing/subscriptions`（`planId` 与月度周期），拼接出三窗口用量。月上限不在响应中，按 `planId` 维护 `PLAN_MONTHLY_CREDITS` 查表换算月用量 = `(planLimit - monthlyCredits) / planLimit`；查不到表或缺 subscriptions 时月窗口置 null（渲染显示 `月:--`）。鉴权失败（401 / 403，API Key 无效或被吊销）归一为 `NO_ACTIVE_PLAN` 无活跃套餐；三窗口全部解析失败时报「响应结构异常」，避免静默渲染 0% 误导；`apiKey` 为空给出明确提示。复用统一 `REQUEST_TIMEOUT_MS` 超时
+- CommandCode 用量查询（`src/query/query-usage-commandcode.mjs`）：读取 `config.json` 的 `commandcode` 凭据，并行请求 `/alpha/billing/credits`（五小时 / 周窗口用量来自 `windowLimits`、月剩余额度来自 `monthlyCredits`）与 `/alpha/billing/subscriptions`（`planId` 与月度周期），拼接出三窗口用量。月上限不在响应中，按 `planId` 维护 `PLAN_MONTHLY_CREDITS` 查表换算月用量 = `(planLimit - monthlyCredits) / planLimit`；查不到表或缺 subscriptions 时月窗口置 null（渲染显示 `月:--`）。鉴权失败（401 / 403，API Key 无效或被吊销）归一为 `NO_ACTIVE_PLAN` 无活跃套餐；三窗口全部解析失败时报「响应结构异常」，避免静默渲染 0% 误导；`apiKey` 为空给出明确提示。复用统一 `REQUEST_TIMEOUT_MS` 超时
 - 接入查询体系：`utils-query-usage.mjs` 新增 `KEYS.COMMANDCODE` 与 `DEFAULT_LABELS.commandcode`（默认 `CommandCode`）；`query-usage-all.mjs` 的 `QUERY_FNS` 接入，输出与匹配顺序为 ark → commandcode → ollama → opencode → qwen
 - 配置文件：`config.example.json` / `config.schema.json` 新增 `commandcode` 账号数组（`apiKey` / `longLabel` / `shortLabel`）
 - `package.json`：新增 `query:commandcode` script
@@ -75,7 +97,7 @@
 
 - 千问套餐过期 / 未订阅时误报「响应结构异常」：此时接口外层返回 SUCCESS 但 `data.DataV2.data` 内层只有元信息、数据体缺失，原实现直接判定为结构异常报错；现识别为无活跃套餐并抛 `NO_ACTIVE_PLAN`，`all` / `smart` 脚本能正确隐藏该行。数据体存在但用量字段（`per5HourPercentage` / `per1WeekPercentage`）全部缺失时仍报「响应结构异常」，不受此判定影响——接口字段改名 / 更新仍会被捕获，不会被误当无活跃套餐静默掩盖
 
-### 变更
+### 优化
 
 - 单元测试扩充（`test/query-usage-qwen.test.mjs`）：新增 queryUsage 请求层错误分支用例，通过 stub `globalThis.fetch` 返回固定响应（不依赖真实网络）覆盖「套餐过期 → 显示无活跃套餐」与「数据体存在但用量字段全缺失 → 仍报结构异常」两个分支
 
@@ -91,7 +113,7 @@
 - `LIGHT_GRAY` 颜色常量（#B0B0B0，白与灰的平均）：倒计时着色专用
 - 单元测试：新增 `get-actual-model-name.test.mjs`（直连 / 路由 / 解析失败 / 输入为空）、`get-actual-model-name-routed.test.mjs`（路由 tier 匹配、多词下划线归一、正则特殊字符转义、`[xxx]` 后缀提取）、`get-actual-provider-name.test.mjs`（`resolveProviderDisplay` 的 free- 前缀 / 匹配与否组合）、`query-usage-cookie-expired.test.mjs`（各平台 cookie 过期错误提示）、`utils-cc-switch-getactualprovider.test.mjs`（`getActualProviderName` 的 launcherId 优先 / 降级 / db 失败）、`utils-cc-switch-getapikey-provider.test.mjs`（`getAPIKey` 走 `getCurrentProviderRow` 链路）；`cache` / `query-usage-negative-cache` / `query-usage-ollama` / `query-usage-smart` / `utils-query-usage` 等既有测试随改动扩充
 
-### 变更
+### 优化
 
 - `get-actual-model.mjs` 拆分重命名为 `get-actual-model-name.mjs`（导出 `getActualModelName`），并新增配套的 `get-actual-provider-name.mjs`；README / README_EN 项目结构同步更新
 - 路由模式判定与 tier 匹配收紧（`get-actual-model-name.mjs`）：本地地址正则由 `127.0.0.1|localhost` 扩展为 `127.0.0.1|localhost|0.0.0.0|[::1]` 并支持可选端口与路径；tier 名（env 键段用下划线连接，如 `SONNET_4`）与 display_name（用连字符 / 空格 / 下划线分隔，如 `claude-sonnet-4`）匹配时，把下划线归一为任意分隔符再匹配，否则多词 tier 永远匹配不到、静默回退到更短的通配 tier；tier 名经 `escapeRegExp` 转义，避免 `\.` 通配任意字符误匹配、不平衡括号抛`SyntaxError` 使 smart 整体崩溃；`[xxx]` 后缀提取改为只取末尾单个括号组，避免贪心吞掉靠前括号
@@ -126,7 +148,7 @@
 - `query-usage-smart` 抽出 `matchAccountByApiKey` 纯函数：按 apiKey 在 config 各账号数组中查找（按 QUERY_FNS 顺序取首个命中），供单测覆盖
 - 单元测试：新增 `test/query-usage-all.test.mjs`（分组 / 过滤 / 标签含 ❌ 与「无活跃套餐」字样不误杀）、`test/query-usage-smart.test.mjs`（匹配 key / index、顺序优先、空 apiKey 与空槽位跳过）、`test/utils-cc-switch-getapikey.test.mjs`（getAPIKey 环境变量优先级、PROXY_MANAGED 占位符回退 db 分支）
 
-### 变更
+### 优化
 
 - 颜色 / 百分比分档跟随展示值：`pctColorCode` / `pctSegment` 统一先经 `formatPct` 归一再分档，保证「显示 99%」对应橙色而非红色
 - `query-usage-all` 输出顺序调整：错误行不再与有效行混排，统一垫底并以空行分隔（组内仍保持账号顺序）
@@ -151,7 +173,7 @@
 - `smart` 脚本匹配不到账号时改为查询全部账号用量（原为静默退出），与免费模型兜底共用 `queryAllFallback`，保证两处显示效果一致
 - 错误标记常量 `ERROR_MARK`（`❌` 后随一个空格）：各查询 / 登录脚本的错误前缀统一引用，`all` 脚本过滤无活跃套餐行时据此定位错误消息，与渲染逻辑共用同一常量保持同步
 
-### 变更
+### 优化
 
 - 渲染降噪与精简：移除 10 格进度条 `bar`，`pctSegment` 改为只渲染着色百分比；窗口间分隔符 `|` 与倒计时 `↻` 改用灰色（#808080）降噪，窗口标签改用白色（#E0E0E0），倒计时改用白色与百分比区分；`AUTO` 档宽度估算改用 `_plain` 模式直接生成纯文本测宽，不再先渲染完整 ANSI 再用正则剥色
 - 颜色常量重构：`LABEL`（亮白 ANSI 97）改为真彩色 `WHITE`（#E0E0E0），新增 `GRAY`（#808080）；`colorful-tokens` 异常问号同步改用 `WHITE`
@@ -180,7 +202,7 @@
 - `package.json`：新增 `ctx:tokens`（colorful-tokens）与 `query:ollama` scripts
 - 单元测试：新增 `test/query-usage-ollama.test.mjs`（HTML 解析、英文时长解析、data-time 优先级与回退、过期钳制为 0）和 `test/colorful-tokens.test.mjs`（四档阈值与边界、k 单位格式化、JSON 解析容错）
 
-### 变更
+### 优化
 
 - 配色升级为 24 位真彩色：`COLORS` 的 GREEN / YELLOW / ORANGE / RED 由标准 ANSI 改为真彩色（#3FB950 / #E3B341 / #D97757 / #EF4444），ORANGE 由 #DE7356 调整为 #D97757
 - 默认标签精简：`火山CodingPlan` -> `火山Coding`、`火山AgentPlan` -> `火山Agent`、`千问TokenPlan` -> `千问`
@@ -212,7 +234,7 @@
 - 单元测试：新增 `test/query-usage-qwen.test.mjs`（千问响应解析），既有测试随渲染与缓存改动同步更新
 - `test/utils-cc-switch.test.mjs`：用临时 SQLite 文件集成测试 `lookupProviderInDb` 的命中 / 未命中 / `app_type` 过滤 / db 损坏场景
 
-### 变更
+### 优化
 
 - 目录重组：`CHANGELOG.md`、`README_EN.md`、`preview.png` 移至 `docs/`；`query-usage-all.cmd` 从 `src/query/` 移至 `scripts/`
 - 缓存文件改名：`tmp/usage-cache.json` → `tmp/cache-usage.json`
@@ -238,7 +260,7 @@
 - `package.json`：声明 `type: module`、Node 版本要求与 npm scripts
 - 单元测试：`test/` 目录，基于 `node:test`，覆盖渲染、参数解析、缓存、响应解析等纯函数（ark/opencode 的解析函数同步改为导出供测试调用）
 
-### 变更
+### 优化
 
 - 架构重构：子进程调用改为进程内函数调用，各查询脚本改为「导出函数 + CLI 壳」双入口模式，`smart`/`all` 直接 import 调用，全链路零子进程启动开销；各脚本仍可独立运行，输出格式不变
 - `utils-query-usage.mjs`：移除 `safeExec`/`safeExecAsync`/`SCRIPTS`/`HELPER`；新增 `readCache`/`writeCache`/`fetchUsageCached`/`isMainModule`/`renderErrorLine`/`COLORS` 颜色常量
@@ -257,7 +279,7 @@
 - `--hide-on-monthly-exhausted` 参数：月度额度耗尽时隐藏该行输出（`true`/`false`，默认 `false`）；smart 脚本使用免费模型查询全部账号时自动启用，过滤已耗尽的账号
 - 用量行前缀着色（薰衣草蓝），错误提示前缀同步着色
 
-### 变更
+### 优化
 
 - `query-usage-all.bat` 变更为 `query-usage-all.cmd`
 - `query-usage-all.mjs` 过滤子脚本的空输出，避免隐藏行留下空行
@@ -271,7 +293,7 @@
 
 - 修复通过 CC Launcher / `claude --settings` 启动 Claude Code 时 `getAPIKey` 读取的是 CC-Switch 全局当前供应商、而非实际注入供应商的 API Key 的问题：改为优先从环境变量 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` 读取，遇到 `PROXY_MANAGED` 占位符则回退到数据库查询
 
-### 变更
+### 优化
 
 - README 项目结构展示从表格改为树形代码块，新增"相关项目"章节介绍 CC Launcher
 - `.gitignore` 新增忽略 `.claude/` 目录
@@ -287,7 +309,7 @@
 - JSON Schema 校验：新增 `config/config.schema.json`，编辑器可据此提供字段提示
 - 并行查询：`query-usage-all.mjs` 并行执行各子脚本
 
-### 变更
+### 优化
 
 - ⚠️ 目录结构重构：脚本从根目录移至 `src/query/`、`src/tools/` 和 `src/utils/`，配置文件移至 `config/`
 - ⚠️ 配置文件格式变更：从单账号对象改为多账号数组，旧配置需迁移
@@ -304,7 +326,7 @@
 
 ## v1.1.1-2026.07.04
 
-### 变更
+### 优化
 
 - 优化 README 的描述与排版
 
@@ -316,7 +338,7 @@
 - `query-usage-all.bat`，Windows 下可双击运行
 - 提取 `query-usage-utils.mjs` 共享工具函数（safeExec、进度条、倒计时、着色）
 
-### 变更
+### 优化
 
 - 全面重构为 ES Module（`.js` -> `.mjs`）
 - 火山方舟改用**火山引擎 OpenAPI（AK/SK 签名 V4）**，不再依赖浏览器 cookie

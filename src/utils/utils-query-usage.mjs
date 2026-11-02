@@ -252,7 +252,7 @@ export function parseArgs(argv) {
             },
         });
     } catch (err) {
-        throw new Error(`参数解析失败: ${err.message}\n${usage}`);
+        throw new Error(`参数解析失败: ${err.message}\n${usage}`, { cause: err });
     }
 
     let display, type;
@@ -262,7 +262,7 @@ export function parseArgs(argv) {
         }
         display = normalizeDisplay(parsed.values.display);
     } catch (err) {
-        throw new Error(`${err.message}\n${usage}`);
+        throw new Error(`${err.message}\n${usage}`, { cause: err });
     }
 
     let position;
@@ -587,7 +587,7 @@ export async function readJsonResponse(resp) {
         if (err?.name === "TimeoutError" || err?.name === "AbortError") {
             throw err;
         }
-        throw new Error("响应非 JSON");
+        throw new Error("响应非 JSON", { cause: err });
     }
 }
 
@@ -612,15 +612,15 @@ export function toResetSec(ts, now) {
 }
 
 /**
- * 三窗口全空且无诊断说明时抛「响应结构异常」
+ * 三窗口全空时抛「响应结构异常」
  *
  * 字段改名/接口更新时主动报错，避免静默渲染 0% 误导用户。
- * usage.note 是供应商解析阶段附带的降级说明（如 commandcode 命中未知 planId 时
- * 只能给出月剩余与套餐名而算不出百分比），有它在即代表响应结构可识别，不应报异常
- * @param {{ rolling: unknown, weekly: unknown, monthly?: unknown, note?: string | null }} usage
+ * note 不参与判定：降级说明只能解释某个窗口为何缺失，不能证明响应结构正常，
+ * 否则三窗口全空 + summary 失败会被误判成「结构可识别」而绕过改版检测
+ * @param {{ rolling?: unknown, weekly?: unknown, monthly?: unknown }} usage
  */
 export function ensureAnyWindow(usage) {
-    if (!usage.rolling && !usage.weekly && !usage.monthly && !usage.note) {
+    if (!usage.rolling && !usage.weekly && !usage.monthly) {
         throw new Error("响应结构异常，接口可能已更新");
     }
 }
@@ -1075,7 +1075,7 @@ export function renderWindows(
     const sep = `${G} | ${R}`;
     const windowsText = segs.join(sep);
     // 供应商可在 usage.note 附一条中文说明，用于「关键数据缺一角但不值得让整行报错」
-    // 的场景（如 commandcode 的月度上限查不到）。放在 renderWindows 内而非外壳里，
+    // 的场景（如 commandcode 的月已花金额获取失败）。放在 renderWindows 内而非外壳里，
     // 是为了让 AUTO 档的 _plain 宽度估算也把它算进去，窄终端下不会溢出
     const note = usage.note ? `${sep}⚠ ${usage.note}` : "";
 
@@ -1136,9 +1136,10 @@ export function loadConfig() {
         if (err.code === "ENOENT") {
             throw new Error(
                 "config.json 不存在，请将 config.example.json 复制为 config.json",
+                { cause: err },
             );
         }
-        throw new Error(`读取 config.json 失败: ${err.message}`);
+        throw new Error(`读取 config.json 失败: ${err.message}`, { cause: err });
     }
 
     // 轻量类型校验：ark/opencode 若存在则须为数组

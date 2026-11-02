@@ -26,7 +26,6 @@ import {
     isMainModule,
     ensureAnyWindow,
     httpStatusError,
-    isTransientError,
     toResetSec,
     fetchWithTimeout,
     readJsonResponse,

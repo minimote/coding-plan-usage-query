@@ -40,6 +40,8 @@ function runCli() {
         env,
         encoding: "utf-8",
         input: "",
+        // 子进程卡住时及时失败，避免测试挂死
+        timeout: 30_000,
     });
 }
 

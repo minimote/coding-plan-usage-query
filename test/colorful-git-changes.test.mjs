@@ -97,21 +97,21 @@ test("parseShortStat: 中文文案解析为 0（调用方应强制 LC_ALL=C）",
 test("formatChanges: 文件数 + 新增绿 + 删除红", () => {
     assert.equal(
         formatChanges({ files: 6, insertions: 48, deletions: 289 }),
-        `${COLORS.WHITE}Δ6${COLORS.RESET} ${COLORS.GREEN}+48${COLORS.RED}-289${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ6${COLORS.RESET}${COLORS.GREEN}+48${COLORS.RED}-289${COLORS.RESET}`,
     );
 });
 
 test("formatChanges: 只有新增时不显示 -0", () => {
     assert.equal(
         formatChanges({ files: 1, insertions: 2, deletions: 0 }),
-        `${COLORS.WHITE}Δ1${COLORS.RESET} ${COLORS.GREEN}+2${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ1${COLORS.RESET}${COLORS.GREEN}+2${COLORS.RESET}`,
     );
 });
 
 test("formatChanges: 只有删除时不显示 +0", () => {
     assert.equal(
         formatChanges({ files: 1, insertions: 0, deletions: 3 }),
-        `${COLORS.WHITE}Δ1${COLORS.RESET} ${COLORS.RED}-3${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ1${COLORS.RESET}${COLORS.RED}-3${COLORS.RESET}`,
     );
 });
 
@@ -154,7 +154,7 @@ test("renderFromRaw: 有变更时显示文件数与增删", () => {
     });
     assert.equal(
         renderFromRaw(payload("F:\\repo"), git),
-        `${COLORS.WHITE}Δ6${COLORS.RESET} ${COLORS.GREEN}+48${COLORS.RED}-289${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ6${COLORS.RESET}${COLORS.GREEN}+48${COLORS.RED}-289${COLORS.RESET}`,
     );
 });
 
@@ -165,7 +165,7 @@ test("renderFromRaw: 只删不增不显示 +0", () => {
     });
     assert.equal(
         renderFromRaw(payload("F:\\repo"), git),
-        `${COLORS.WHITE}Δ1${COLORS.RESET} ${COLORS.RED}-3${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ1${COLORS.RESET}${COLORS.RED}-3${COLORS.RESET}`,
     );
 });
 
@@ -190,7 +190,7 @@ test("renderFromRaw: 未跟踪文件计入文件数与新增行", () => {
     // 1 个已跟踪文件 + 2 个未跟踪；新增 1 + 2 + 1
     assert.equal(
         renderFromRaw(payload("F:/repo"), git, readFile),
-        `${COLORS.WHITE}Δ3${COLORS.RESET} ${COLORS.GREEN}+4${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ3${COLORS.RESET}${COLORS.GREEN}+4${COLORS.RESET}`,
     );
 });
 
@@ -214,7 +214,7 @@ test("renderFromRaw: 空仓库（无 HEAD）退到暂存区 + 工作区", () => 
     });
     assert.equal(
         renderFromRaw(payload("F:/repo"), git),
-        `${COLORS.WHITE}Δ1${COLORS.RESET} ${COLORS.GREEN}+2${COLORS.RESET}`,
+        `${COLORS.WHITE}Δ1${COLORS.RESET}${COLORS.GREEN}+2${COLORS.RESET}`,
     );
 });
 

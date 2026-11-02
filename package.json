@@ -1,7 +1,7 @@
 {
     "name": "coding-plan-usage-query",
-    "version": "2.11.0",
-    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、Command Code、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
+    "version": "2.12.0",
+    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、CommandCode、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
     "type": "module",
     "private": true,
     "engines": {
@@ -17,9 +17,13 @@
         "query:opencode": "node src/query/query-usage-opencode-go.mjs",
         "query:qwen": "node src/query/query-usage-qwen.mjs",
         "preview": "node src/tools/preview.mjs",
-        "test": "node --test"
+        "test": "node --test",
+        "lint": "eslint src test"
     },
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "eslint": "^10.14.0",
+        "globals": "^17.14.0",
         "playwright-core": "^1.62.0"
     },
     "license": "MIT"

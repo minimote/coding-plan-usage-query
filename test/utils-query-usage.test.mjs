@@ -894,10 +894,10 @@ test("ensureAnyWindow: 三窗口全空且无 note 抛响应结构异常", () => 
     );
 });
 
-test("ensureAnyWindow: 三窗口全空但有降级 note 不抛（保留诊断说明）", () => {
-    // commandcode 命中未知 planId 时只能给出 note，不应被当成结构异常吞掉
-    const usage = { rolling: null, weekly: null, monthly: null, note: "月剩余 $5.50，当前为「x」套餐" };
-    assert.doesNotThrow(() => ensureAnyWindow(usage));
+test("ensureAnyWindow: 三窗口全空时即使有 note 也抛，note 不能掩盖接口改版", () => {
+    // note 只解释某个窗口为何缺失，不能证明响应结构正常
+    const usage = { rolling: null, weekly: null, monthly: null, note: "月剩余额度获取失败" };
+    assert.throws(() => ensureAnyWindow(usage), /响应结构异常/);
 });
 
 // #endregion ensureAnyWindow ----------------

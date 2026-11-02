@@ -57,11 +57,11 @@
             }
         },
         "commandcode": {
-            "title": "Command Code 账号列表",
+            "title": "CommandCode 账号列表",
             "description": "",
             "type": "array",
             "items": {
-                "title": "Command Code 账号",
+                "title": "CommandCode 账号",
                 "type": "object",
                 "properties": {
                     "longLabel": {
@@ -76,7 +76,7 @@
                     },
                     "apiKey": {
                         "title": "API Key <必填>",
-                        "description": "- Command Code 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
+                        "description": "- CommandCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
                         "type": "string"
                     }
                 },

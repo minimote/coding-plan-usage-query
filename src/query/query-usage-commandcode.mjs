@@ -1,10 +1,10 @@
 /**
- * @file Command Code 用量查询
+ * @file CommandCode 用量查询
  *
  * 读取 config.json 的 commandcode 数组获取凭据
- * 并行请求 billing/credits 与 billing/subscriptions 两个内部端点，
- * credits 给窗口用量（5h/周）与月剩余额度，subscriptions 给 planId（查表得月上限）
- * 与月度周期，两者缺一不可
+ * 并行请求 billing/credits、billing/subscriptions 与 usage/summary 三个内部端点，
+ * credits 给窗口用量（5h/周）与月剩余额度，subscriptions 给月度周期，
+ * summary 给本周期已花金额（与月剩余相加即为月总额度）
  *
  * 用法:
  *   node query-usage-commandcode.mjs
@@ -38,41 +38,18 @@ const KEY = KEYS.COMMANDCODE;
 
 const BASE_URL = "https://api.commandcode.ai";
 
-/**
- * planId → 月度额度上限（美元）
- *
- * 月上限是商业定价，API 响应中不存在（credits.monthlyCredits 是月剩余不是月上限），
- * 只能按 planId 查表；上游定价调整或上新套餐时需同步维护此表。
- * 查表失败时抛错而非静默隐去月窗口：月额度是最关键的限额，看不到必须让用户知道要更新工具
- * @type {Object<string, number>}
- */
-const PLAN_MONTHLY_CREDITS = Object.freeze({
-    "individual-go": 10,
-    "individual-goat": 70,
-    "individual-pro": 30,
-    "individual-pro-v1": 80,
-    "individual-provider": 15,
-    "individual-max": 150,
-    "individual-ultra": 300,
-    "teams-pro": 40,
-});
-
 // #endregion 配置常量 --------------------------------
 
 // #region 解析工具 ----------------
 
 /**
- * 解析 credits + subscriptions 两份响应为项目标准 usage 结构
+ * 解析 credits + subscriptions + summary 三份响应为项目标准 usage 结构
  *
- * 窗口数据来自 credits.windowLimits（resetAt 为毫秒 epoch 数字）；
- * 月度窗口由 planId 查表上限与 credits.monthlyCredits（月剩余）计算得出
- *
- * 月度上限不在任何响应字段里，只能按 planId 查表。planId 未收录（上游新增/改名套餐）
- * 时百分比算不出来，但 5h/周窗口仍然有效，故只降级月窗口并在 usage.note 附说明，
- * 不让整行失败——否则用户连其他窗口的用量都看不到
+ * 月度用「已花 + 剩余」反推总额度：/alpha 不返回月上限
  *
  * @param {object} credits /alpha/billing/credits 响应体
  * @param {object} subs /alpha/billing/subscriptions 响应体
+ * @param {object} summary /alpha/usage/summary 响应体
  * @param {number} [now=Date.now()] 当前时间戳，用于计算倒计时
  * @returns {{
  *     rolling: { pct: number, sec: number } | null,
@@ -81,13 +58,12 @@ const PLAN_MONTHLY_CREDITS = Object.freeze({
  *     note: string | null
  * }}
  */
-export function parseUsageResponse(credits, subs, now = Date.now()) {
+export function parseUsageResponse(credits, subs, summary, now = Date.now()) {
     const toWindow = (w) => {
         if (!w || typeof w !== "object") {
             return null;
         }
-        // cap/used 必须是原始 number：Number() 会把 null/""/false 强转为 0，
-        // 后端对缺失字段返回 null 时会被误算成 0%（未使用）而非丢弃窗口
+        // 必须是原始 number，Number() 会把 null/"" 强转成 0 而误算成未使用
         const cap = w.cap;
         const used = w.used;
         if (
@@ -105,68 +81,67 @@ export function parseUsageResponse(credits, subs, now = Date.now()) {
         };
     };
 
+    // limited 显式 false 是按量付费，不展示滚动窗口；缺失时照常展示，避免改字段名后窗口消失
     const windows = credits?.windowLimits;
-    // monthlyCredits 必须是原始 number：Number() 会把 null/""/false 强转为 0，
-    // 后端对无月度额度的套餐返回 null 时会被误算成 100%（已耗尽），开启
-    // hideOnMonthlyExhausted 时还会因此隐藏整行
-    const monthlyCredits = credits?.credits?.monthlyCredits;
+    const windowLimited = windows?.limited !== false;
     const monthly = monthlyWindow(
-        subs?.data?.planId,
-        monthlyCredits,
+        credits?.credits,
+        toTotalCost(summary),
         toMonthSec(subs?.data?.currentPeriodEnd, now),
     );
-    return {
-        rolling: toWindow(windows?.fiveHour),
-        weekly: toWindow(windows?.weekly),
-        monthly: monthly.window,
-        note: monthly.note,
-    };
+    const usage = { monthly: monthly.window, note: monthly.note };
+    // 按量付费账号不写键（缺键=平台无此窗口），而不是置 null（会被渲染成 五:--）
+    if (windowLimited) {
+        usage.rolling = toWindow(windows?.fiveHour);
+        usage.weekly = toWindow(windows?.weekly);
+    }
+    return usage;
 }
 
 /**
- * planId + 月剩余 → 月度窗口与（可能的）降级说明
+ * summary 的本周期已花金额
  *
- * 上游把 purchasedCredits 计入 monthlyCredits，超额购买后月剩余会大于套餐上限，
- * 算出的百分比为负；负值意味着本工具算不出可信的月用量（而非「未使用」），
- * 故按数据不可信丢窗口，交由渲染层显示 月:-- 而不是绿色的 0%
+ * 兼容顶层与 { success, data } 包装两种响应形态；负数/非有限值视为不可用
  *
- * @param {string} planId subscriptions.data.planId
- * @param {unknown} monthlyCredits credits.credits.monthlyCredits
- * @param {number | null} periodSec 月度周期剩余秒数（由 currentPeriodEnd 算出）
- * @returns {{ window: { pct: number, sec: number } | null, note: string | null }}
- *          window 为 null 时显示 月:--；note 为需要用户知晓的降级原因
+ * @param {object} summary /alpha/usage/summary 响应体
+ * @returns {number | null}
  */
-function monthlyWindow(planId, monthlyCredits, periodSec) {
-    const remaining =
-        typeof monthlyCredits === "number" && Number.isFinite(monthlyCredits)
-            ? monthlyCredits
-            : null;
+function toTotalCost(summary) {
+    const raw = summary?.totalCost ?? summary?.data?.totalCost;
+    return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+        ? raw
+        : null;
+}
 
-    if (typeof planId !== "string" || !planId) {
-        // 无套餐名（未订阅/字段缺失）时无从换算，也不能凭空报错
+/**
+ * 月剩余 + 本周期已花 → 月度窗口
+ *
+ * 分母是反推出来的月总额度（已花 + 剩余）；剩余缺失时不能按 0 计，
+ * 否则分母只剩 totalCost、百分比恒为 100%
+ *
+ * @param {object} creditValues credits.credits
+ * @param {number | null} totalCost usage/summary 的本周期已花
+ * @param {number | null} periodSec 月度周期剩余秒数
+ * @returns {{ window: { pct: number, sec: number } | null, note: string | null }}
+ */
+function monthlyWindow(creditValues, totalCost, periodSec) {
+    if (totalCost === null) {
+        // 分子拿不到，5h/周仍有效，只降级月窗口
+        return { window: null, note: "月已花金额获取失败" };
+    }
+    // 必须是非负 number：Number() 会把 null/"" 强转成 0 而误算成已耗尽
+    const remaining = creditValues?.monthlyCredits;
+    if (typeof remaining !== "number" || !Number.isFinite(remaining) || remaining < 0) {
+        return { window: null, note: "月剩余额度获取失败" };
+    }
+    // purchasedCredits 和 freeCredits 归属未验证，一并
+    //只按「已花 + 套餐剩余」算总额度，避免重复计数
+    const pool = totalCost + remaining;
+    if (pool <= 0) {
         return { window: null, note: null };
     }
-    const planLimit = PLAN_MONTHLY_CREDITS[planId];
-    // 判类型而非 !== undefined：planId 若撞上 Object.prototype 的键名（toString 等），
-    // 下标取值得到的是函数，会把「未收录」漏过去并算出 NaN 百分比
-    if (typeof planLimit !== "number") {
-        // 上游新增/改名套餐：月上限无从得知，但不让整行失败——5h/周窗口仍然有效，
-        // 用户也该看得到。只把能拿到的那两项（月剩余、套餐名）如实说出来
-        return {
-            window: null,
-            note:
-                remaining === null
-                    ? `当前为「${planId}」套餐，月总额度未知`
-                    : `月剩余 $${remaining.toFixed(2)}，当前为「${planId}」套餐`,
-        };
-    }
-    if (remaining === null) {
-        return { window: null, note: null };
-    }
-    const pct = ((planLimit - remaining) / planLimit) * 100;
-    // 负值 = 超额购买致月剩余大于上限，数据不可信
     return {
-        window: pct < 0 ? null : { pct, sec: periodSec },
+        window: { pct: (totalCost / pool) * 100, sec: periodSec },
         note: null,
     };
 }
@@ -187,7 +162,7 @@ function toMonthSec(iso, now) {
 // #region API 调用 ----------------
 
 /**
- * 请求 Command Code 内部端点，返回解析后的 JSON
+ * 请求 CommandCode 内部端点，返回解析后的 JSON
  *
  * @param {string} path 以 / 开头的路径（可含 query）
  * @param {string} apiKey
@@ -202,8 +177,8 @@ async function callApi(path, apiKey) {
         },
     });
 
-    // 401/403 指向 key 本身（填错/被吊销/无 scope）；套餐过期表现为 200 + 窗口全 null，
-    // 不走这两个码，故 403 不应判成「无活跃套餐」（会被 hideOnNoActivePlan 静默吞掉）
+    // 401/403 指向 key 本身；套餐过期是 200 + 窗口全空，不走这两个码，
+    // 故不能判成「无活跃套餐」而被 hideOnNoActivePlan 静默隐藏
     if (resp.status === 401 || resp.status === 403) {
         throw new Error(INVALID_API_KEY);
     }
@@ -215,28 +190,32 @@ async function callApi(path, apiKey) {
 }
 
 /**
- * 并行请求 credits 与 subscriptions，解析为项目标准 usage 结构
+ * 并行请求三个端点，解析为项目标准 usage 结构
  *
  * @param {string} apiKey
  * @returns {Promise<{
  *     rolling: { pct: number, sec: number } | null,
  *     weekly: { pct: number, sec: number } | null,
- *     monthly: { pct: number, sec: number } | null
+ *     monthly: { pct: number, sec: number } | null,
+ *     note?: string | null
  * }>}
  */
 async function fetchUsage(apiKey) {
+    // summary 只补月窗口，失败不该拖垮 5h/周；用常规超时，实测首次请求约 2.6s
+    const summaryPromise = callApi("/alpha/usage/summary", apiKey).catch(
+        () => null,
+    );
     const [credits, subs] = await Promise.all([
         callApi("/alpha/billing/credits", apiKey),
         callApi("/alpha/billing/subscriptions", apiKey),
     ]);
 
-    // 无活跃订阅时上游返回 200 且 subscriptions.data 为 null；先拦下避免三窗口全空
-    // 误报「响应结构异常」
+    // 套餐过期时返回 200 + data:null，先拦下避免误报结构异常
     if (!subs?.data) {
         throw new Error(NO_ACTIVE_PLAN);
     }
 
-    const usage = parseUsageResponse(credits, subs);
+    const usage = parseUsageResponse(credits, subs, (await summaryPromise) ?? {});
     ensureAnyWindow(usage);
     return usage;
 }
@@ -246,7 +225,7 @@ async function fetchUsage(apiKey) {
 // #region 查询入口 ----------------
 
 /**
- * 查询 Command Code 用量并返回渲染后的输出行
+ * 查询 CommandCode 用量并返回渲染后的输出行
  *
  * 不抛出异常：出错时返回带账号标签前缀的错误字符串，便于调用方保持退出码 0
  *
@@ -264,7 +243,7 @@ export async function queryUsage(options = {}) {
             key: KEY,
             defaultLabels: DEFAULT_LABELS[KEY],
             readCredential: (account) => (account.apiKey || "").trim(),
-            missingCredential: "apiKey 为空，请填入 Command Code API Key",
+            missingCredential: "apiKey 为空，请填入 CommandCode API Key",
             fetchUsage,
         },
         options,

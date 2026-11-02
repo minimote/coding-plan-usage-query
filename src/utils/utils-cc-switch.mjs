@@ -225,7 +225,7 @@ export async function lookupProviderInDb(id) {
                 .get(id, APP_TYPE) || null
         );
     } catch (e) {
-        throw new Error(`CC-Switch 数据库读取失败: ${e.message}`);
+        throw new Error(`CC-Switch 数据库读取失败: ${e.message}`, { cause: e });
     } finally {
         db?.close();
     }
@@ -308,7 +308,7 @@ export async function getAPIKey() {
     try {
         providerEnv = JSON.parse(row.settings_config).env || {};
     } catch (error) {
-        throw new Error(`无法获取 API Key: ${error.message}`);
+        throw new Error(`无法获取 API Key: ${error.message}`, { cause: error });
     }
     const key =
         providerEnv.ANTHROPIC_AUTH_TOKEN || providerEnv.ANTHROPIC_API_KEY;

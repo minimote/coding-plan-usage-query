@@ -24,7 +24,7 @@
 |               套餐                |        获取方式         |
 | :-------------------------------: | :---------------------: |
 | 火山方舟 Coding Plan / Agent Plan | 火山引擎 OpenAPI(AK/SK) |
-|           Command Code            |        内部 API         |
+|            CommandCode            |        内部 API         |
 |           Ollama Cloud            | 页面 HTML 解析(cookie)  |
 |            OpenCode Go            |        内部 API         |
 |       阿里云千问 Token Plan       |    内部 API(cookie)     |
@@ -58,7 +58,7 @@ coding-plan-usage-query/
 │   ├── query/
 │   │   ├── query-usage-all.mjs            # 查询全部套餐（并行）
 │   │   ├── query-usage-ark.mjs            # 火山方舟用量查询
-│   │   ├── query-usage-commandcode.mjs    # Command Code 用量查询
+│   │   ├── query-usage-commandcode.mjs    # CommandCode 用量查询
 │   │   ├── query-usage-ollama.mjs         # Ollama Cloud 用量查询
 │   │   ├── query-usage-opencode-go.mjs    # OpenCode Go 用量查询
 │   │   ├── query-usage-qwen.mjs           # 千问 Token Plan 用量查询
@@ -94,7 +94,7 @@ coding-plan-usage-query/
 打开 `config.json`，按 `config.schema.json` 中的字段说明填入凭据：
 
 - **火山方舟 Coding Plan / Agent Plan**：在火山引擎控制台创建 AccessKey，填入 `accessKeyId` 和 `secretAccessKey`
-- **Command Code**：在 Command Code 官网获取 API Key，填入 `apiKey`
+- **CommandCode**：在 CommandCode 官网获取 API Key，填入 `apiKey`
 - **Ollama Cloud**：根据 `config.schema.json` 提示填写 `cookie`
 - **OpenCode Go**：在 OpenCode Console 订阅 Go 后创建 API Key，填入 `apiKey`
 - **阿里云千问 Token Plan**：运行 `login-qwen.cmd` 自动写入 `cookie`，或根据 `config.schema.json` 提示填写
@@ -116,7 +116,7 @@ node src/query/query-usage-ark.mjs
 # 火山方舟 Agent Plan（强制指定）
 node src/query/query-usage-ark.mjs --type agent
 
-# Command Code
+# CommandCode
 node src/query/query-usage-commandcode.mjs
 
 # Ollama Cloud
@@ -156,7 +156,7 @@ node src/tools/preview.mjs
 
 ## 配置文件说明
 
-配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`commandcode`、`ollama`、`opencode`、`qwen` 五个数组，分别对应火山方舟、Command Code、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。
+配置文件 `config/config.json` 顶层为 JSON 对象，包含 `ark`、`commandcode`、`ollama`、`opencode`、`qwen` 五个数组，分别对应火山方舟、CommandCode、Ollama、OpenCode、千问的账号列表，每个数组支持多账号。
 
 ### 火山方舟 Coding Plan / Agent Plan
 
@@ -193,7 +193,7 @@ node src/tools/preview.mjs
 
 在火山引擎控制台 <https://console.volcengine.com/iam/keymanage> 创建 AccessKey（子账户需具有 `AccessKeySelfManageAccess` 和 `ArkReadOnlyAccess` 权限）。
 
-### Command Code
+### CommandCode
 
 ```json
 {
@@ -207,10 +207,10 @@ node src/tools/preview.mjs
 }
 ```
 
-|            字段            | 必填 | 说明                                                           |
-| :------------------------: | :--: | -------------------------------------------------------------- |
-| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（CommandCode）                        |
-|          `apiKey`          |  是  | Command Code 的 API Key，用于查询用量和 smart 脚本匹配当前账号 |
+|            字段            | 必填 | 说明                                                          |
+| :------------------------: | :--: | ------------------------------------------------------------- |
+| `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（CommandCode）                       |
+|          `apiKey`          |  是  | CommandCode 的 API Key，用于查询用量和 smart 脚本匹配当前账号 |
 
 ### Ollama Cloud
 
