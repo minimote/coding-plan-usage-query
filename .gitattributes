@@ -1,0 +1,58 @@
+# ==================================================
+# 行尾策略
+# ==================================================
+# 仓库内一律 LF，检出时也一律 LF（不受个人 core.autocrlf 影响）
+* text=auto eol=lf
+
+
+# ==================================================
+# Windows 脚本：必须 CRLF
+# ==================================================
+# cmd.exe 按字节偏移读取批处理文件，LF-only 会导致命令解析错乱
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+
+# ==================================================
+# 二进制：禁止行尾转换与文本 diff
+# ==================================================
+*.7z     binary
+*.a      binary
+*.aar    binary
+*.aab    binary
+*.apk    binary
+*.bmp    binary
+*.class  binary
+*.db     binary
+*.dex    binary
+*.dll    binary
+*.doc    binary
+*.docx   binary
+*.dylib  binary
+*.exe    binary
+*.gif    binary
+*.gz     binary
+*.hprof  binary
+*.ico    binary
+*.jar    binary
+*.jks    binary
+*.jpeg   binary
+*.jpg    binary
+*.keystore binary
+*.lib    binary
+*.lnk    binary
+*.o      binary
+*.pdf    binary
+*.png    binary
+*.ppt    binary
+*.pptx   binary
+*.rar    binary
+*.so     binary
+*.tar    binary
+*.ttf    binary
+*.webp   binary
+*.woff   binary
+*.woff2  binary
+*.xls    binary
+*.xlsx   binary
+*.zip    binary

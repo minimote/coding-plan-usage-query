@@ -1,187 +1,187 @@
 {
-    "$schema": "https://json-schema.org/draft-07/schema#",
-    "title": "CodingPlan Usage Query Config",
-    "description": "配置文件，包含所有账号凭据",
-    "type": "object",
-    "properties": {
-        "$schema": {
-            "title": "JSON Schema 配置校验文件"
-        },
-        "ark": {
-            "title": "火山方舟 Coding Plan / Agent Plan 账号列表",
-            "description": "",
-            "type": "array",
-            "items": {
-                "title": "火山方舟账号",
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "title": "套餐类型: coding | agent [选填]",
-                        "description": "对应 CodingPlan 和 Agent Plan",
-                        "type": "string",
-                        "enum": [
-                            "coding",
-                            "agent"
-                        ]
-                    },
-                    "longLabel": {
-                        "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (火山Coding / 火山Agent)",
-                        "type": "string"
-                    },
-                    "shortLabel": {
-                        "title": "短版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (Coding / Agent)",
-                        "type": "string"
-                    },
-                    "accessKeyId": {
-                        "title": "火山引擎 AccessKey ID <必填>",
-                        "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
-                        "type": "string"
-                    },
-                    "secretAccessKey": {
-                        "title": "火山引擎 SecretAccessKey <必填>",
-                        "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
-                        "type": "string"
-                    },
-                    "apiKey": {
-                        "title": "API Key [选填]",
-                        "description": "CC-Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "accessKeyId",
-                    "secretAccessKey"
-                ]
-            }
-        },
-        "commandcode": {
-            "title": "CommandCode 账号列表",
-            "description": "",
-            "type": "array",
-            "items": {
-                "title": "CommandCode 账号",
-                "type": "object",
-                "properties": {
-                    "longLabel": {
-                        "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (CommandCode)",
-                        "type": "string"
-                    },
-                    "shortLabel": {
-                        "title": "短版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (CommandCode)",
-                        "type": "string"
-                    },
-                    "apiKey": {
-                        "title": "API Key <必填>",
-                        "description": "- CommandCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "apiKey"
-                ]
-            }
-        },
-        "ollama": {
-            "title": "Ollama Cloud 账号列表",
-            "description": "",
-            "type": "array",
-            "items": {
-                "title": "Ollama 账号",
-                "type": "object",
-                "properties": {
-                    "longLabel": {
-                        "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (Ollama)",
-                        "type": "string"
-                    },
-                    "shortLabel": {
-                        "title": "短版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (Ollama)",
-                        "type": "string"
-                    },
-                    "cookie": {
-                        "title": "Cookie <必填>",
-                        "description": "- 手动获取：\n    - 登录 https://ollama.com 后从浏览器 Cookie 复制 __Secure-session 的值\n    - F12 -> 应用程序(Application) -> Cookies -> ollama.com -> __Secure-session",
-                        "type": "string"
-                    },
-                    "apiKey": {
-                        "title": "API Key [选填]",
-                        "description": "CC-Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "cookie"
-                ]
-            }
-        },
-        "opencode": {
-            "title": "OpenCode Go 账号列表",
-            "description": "",
-            "type": "array",
-            "items": {
-                "title": "OpenCode 账号",
-                "type": "object",
-                "properties": {
-                    "longLabel": {
-                        "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (OpenCode Go)",
-                        "type": "string"
-                    },
-                    "shortLabel": {
-                        "title": "短版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (Go)",
-                        "type": "string"
-                    },
-                    "apiKey": {
-                        "title": "API Key <必填>",
-                        "description": "- OpenCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "apiKey"
-                ]
-            }
-        },
-        "qwen": {
-            "title": "阿里云千问 Token Plan 账号列表",
-            "description": "",
-            "type": "array",
-            "items": {
-                "title": "千问账号",
-                "type": "object",
-                "properties": {
-                    "longLabel": {
-                        "title": "长版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (千问)",
-                        "type": "string"
-                    },
-                    "shortLabel": {
-                        "title": "短版显示标签 [选填]",
-                        "description": "不填则使用默认标签 (千问)",
-                        "type": "string"
-                    },
-                    "cookie": {
-                        "title": "千问控制台登录 Cookie <必填>",
-                        "description": "- 自动获取：运行 npm run login:qwen (或双击 login-qwen.cmd)\n- 手动获取：\n    - 登录 https://platform.qianwenai.com 后从浏览器复制 Cookie header\n    - F12 -> Network -> 任意请求 -> Headers -> Cookie",
-                        "type": "string"
-                    },
-                    "apiKey": {
-                        "title": "API Key [选填]",
-                        "description": "CC-Switch 里填的 API Key, smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "cookie"
-                ]
-            }
-        }
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "CodingPlan Usage Query Config",
+  "description": "配置文件，包含所有账号凭据",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "title": "JSON Schema 配置校验文件"
     },
-    "additionalProperties": false
+    "ark": {
+      "title": "火山方舟 Coding Plan / Agent Plan 账号列表",
+      "description": "",
+      "type": "array",
+      "items": {
+        "title": "火山方舟账号",
+        "type": "object",
+        "properties": {
+          "type": {
+            "title": "套餐类型: coding | agent [选填]",
+            "description": "对应 CodingPlan 和 Agent Plan",
+            "type": "string",
+            "enum": [
+              "coding",
+              "agent"
+            ]
+          },
+          "longLabel": {
+            "title": "长版显示标签 [选填]",
+            "description": "不填则使用默认标签 (火山Coding / 火山Agent)",
+            "type": "string"
+          },
+          "shortLabel": {
+            "title": "短版显示标签 [选填]",
+            "description": "不填则使用默认标签 (Coding / Agent)",
+            "type": "string"
+          },
+          "accessKeyId": {
+            "title": "火山引擎 AccessKey ID <必填>",
+            "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
+            "type": "string"
+          },
+          "secretAccessKey": {
+            "title": "火山引擎 SecretAccessKey <必填>",
+            "description": "- 登录火山引擎控制台: https://console.volcengine.com/iam/keymanage 创建 AccessKey\n- 复制 AccessKey ID 和 SecretAccess Key\n- 如果使用子账户, 需要确保具有 AccessKeySelfManageAccess 和 ArkReadOnlyAccess 权限",
+            "type": "string"
+          },
+          "apiKey": {
+            "title": "API Key [选填]",
+            "description": "CC Switch 里填的 API Key，smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessKeyId",
+          "secretAccessKey"
+        ]
+      }
+    },
+    "commandcode": {
+      "title": "CommandCode 账号列表",
+      "description": "",
+      "type": "array",
+      "items": {
+        "title": "CommandCode 账号",
+        "type": "object",
+        "properties": {
+          "longLabel": {
+            "title": "长版显示标签 [选填]",
+            "description": "不填则使用默认标签 (CommandCode)",
+            "type": "string"
+          },
+          "shortLabel": {
+            "title": "短版显示标签 [选填]",
+            "description": "不填则使用默认标签 (CommandCode)",
+            "type": "string"
+          },
+          "apiKey": {
+            "title": "API Key <必填>",
+            "description": "- CommandCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ]
+      }
+    },
+    "ollama": {
+      "title": "Ollama Cloud 账号列表",
+      "description": "",
+      "type": "array",
+      "items": {
+        "title": "Ollama 账号",
+        "type": "object",
+        "properties": {
+          "longLabel": {
+            "title": "长版显示标签 [选填]",
+            "description": "不填则使用默认标签 (Ollama)",
+            "type": "string"
+          },
+          "shortLabel": {
+            "title": "短版显示标签 [选填]",
+            "description": "不填则使用默认标签 (Ollama)",
+            "type": "string"
+          },
+          "cookie": {
+            "title": "Cookie <必填>",
+            "description": "- 手动获取：\n    - 登录 https://ollama.com 后从浏览器 Cookie 复制 __Secure-session 的值\n    - F12 -> 应用程序(Application) -> Cookies -> ollama.com -> __Secure-session",
+            "type": "string"
+          },
+          "apiKey": {
+            "title": "API Key [选填]",
+            "description": "CC Switch 里填的 API Key，smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cookie"
+        ]
+      }
+    },
+    "opencode": {
+      "title": "OpenCode Go 账号列表",
+      "description": "",
+      "type": "array",
+      "items": {
+        "title": "OpenCode 账号",
+        "type": "object",
+        "properties": {
+          "longLabel": {
+            "title": "长版显示标签 [选填]",
+            "description": "不填则使用默认标签 (OpenCode Go)",
+            "type": "string"
+          },
+          "shortLabel": {
+            "title": "短版显示标签 [选填]",
+            "description": "不填则使用默认标签 (Go)",
+            "type": "string"
+          },
+          "apiKey": {
+            "title": "API Key <必填>",
+            "description": "- OpenCode 的 API Key\n- 用于查询用量和 smart 脚本匹配当前账号",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ]
+      }
+    },
+    "qwen": {
+      "title": "阿里云千问 Token Plan 账号列表",
+      "description": "",
+      "type": "array",
+      "items": {
+        "title": "千问账号",
+        "type": "object",
+        "properties": {
+          "longLabel": {
+            "title": "长版显示标签 [选填]",
+            "description": "不填则使用默认标签 (千问)",
+            "type": "string"
+          },
+          "shortLabel": {
+            "title": "短版显示标签 [选填]",
+            "description": "不填则使用默认标签 (千问)",
+            "type": "string"
+          },
+          "cookie": {
+            "title": "千问控制台登录 Cookie <必填>",
+            "description": "- 自动获取：运行 npm run login:qwen (或双击 login-qwen.cmd)\n- 手动获取：\n    - 登录 https://platform.qianwenai.com 后从浏览器复制 Cookie header\n    - F12 -> Network -> 任意请求 -> Headers -> Cookie",
+            "type": "string"
+          },
+          "apiKey": {
+            "title": "API Key [选填]",
+            "description": "CC Switch 里填的 API Key，smart 脚本据此匹配当前账号，不使用 smart 脚本可不填",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cookie"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
 }

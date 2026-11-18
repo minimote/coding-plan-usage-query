@@ -15,15 +15,15 @@
  * @param {number} [status=200]
  */
 export function makeJsonResp(body, status = 200) {
-    return {
-        status,
-        ok: status >= 200 && status < 300,
-        // 与 makeResp 的能力对齐：缺了它，在 3xx 分支上误用本构造函数会抛
-        // TypeError，那种失败看起来像产品 bug 而非测试写错
-        headers: { get: () => null },
-        json: async () => body,
-        text: async () => JSON.stringify(body),
-    };
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    // 与 makeResp 的能力对齐：缺了它，在 3xx 分支上误用本构造函数会抛
+    // TypeError，那种失败看起来像产品 bug 而非测试写错
+    headers: { get: () => null },
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  };
 }
 
 /**
@@ -32,7 +32,7 @@ export function makeJsonResp(body, status = 200) {
  * @param {() => Promise<*>} fn
  */
 export async function withFetch(resp, fn) {
-    return withFetchByUrl(() => resp, fn);
+  return withFetchByUrl(() => resp, fn);
 }
 
 /**
@@ -48,17 +48,17 @@ export async function withFetch(resp, fn) {
  * @param {string} [opts.body] 响应体
  */
 export function makeResp({ status = 200, location = null, body = "" }) {
-    return {
-        status,
-        ok: status >= 200 && status < 300,
-        headers: {
-            get: (k) => (k.toLowerCase() === "location" ? location : null),
-        },
-        text: async () => body,
-        // 非 JSON 的 body（HTML 页面）只在走 text() 的路径上出现，
-        // 走到 json() 说明被测代码预期它是 JSON，抛错即符合预期
-        json: async () => JSON.parse(body),
-    };
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    headers: {
+      get: (k) => (k.toLowerCase() === "location" ? location : null),
+    },
+    text: async () => body,
+    // 非 JSON 的 body（HTML 页面）只在走 text() 的路径上出现，
+    // 走到 json() 说明被测代码预期它是 JSON，抛错即符合预期
+    json: async () => JSON.parse(body),
+  };
 }
 
 /**
@@ -67,7 +67,7 @@ export function makeResp({ status = 200, location = null, body = "" }) {
  * @param {() => Promise<*>} fn
  */
 export async function withFetchByUrl(handler, fn) {
-    return withStub(async (url) => handler(String(url)), fn);
+  return withStub(async (url) => handler(String(url)), fn);
 }
 
 /**
@@ -81,21 +81,21 @@ export async function withFetchByUrl(handler, fn) {
  * @returns {Promise<Array<{ url: string, init: object }>>} 按调用顺序记录
  */
 export async function withFetchCapture(handler, fn) {
-    const calls = [];
-    await withStub(async (url, init) => {
-        calls.push({ url: String(url), init });
-        return handler(String(url), init);
-    }, fn);
-    return calls;
+  const calls = [];
+  await withStub(async (url, init) => {
+    calls.push({ url: String(url), init });
+    return handler(String(url), init);
+  }, fn);
+  return calls;
 }
 
 /** save/restore globalThis.fetch 的唯一实现 */
 async function withStub(impl, fn) {
-    const orig = globalThis.fetch;
-    globalThis.fetch = impl;
-    try {
-        return await fn();
-    } finally {
-        globalThis.fetch = orig;
-    }
+  const orig = globalThis.fetch;
+  globalThis.fetch = impl;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = orig;
+  }
 }

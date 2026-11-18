@@ -1,4 +1,5 @@
 .claude/
+CLAUDE.md
 .history/
 tmp/
 node_modules/

@@ -17,20 +17,20 @@
  */
 
 import {
-    TYPE,
-    normalizeType,
-    KEYS,
-    NO_ACTIVE_PLAN,
-    resolvePrefixes,
-    DEFAULT_LABELS,
-    isMainModule,
-    ensureAnyWindow,
-    httpStatusError,
-    toResetSec,
-    fetchWithTimeout,
-    readJsonResponse,
-    runQueryCli,
-    runQueryUsage,
+  TYPE,
+  normalizeType,
+  KEYS,
+  NO_ACTIVE_PLAN,
+  resolvePrefixes,
+  DEFAULT_LABELS,
+  isMainModule,
+  ensureAnyWindow,
+  httpStatusError,
+  toResetSec,
+  fetchWithTimeout,
+  readJsonResponse,
+  runQueryCli,
+  runQueryUsage,
 } from "../utils/utils-query-usage.mjs";
 import { createHmac, createHash } from "crypto";
 
@@ -53,7 +53,7 @@ const KEY = KEYS.ARK;
  * @returns {Buffer}
  */
 function hmacSha256(key, data) {
-    return createHmac("sha256", key).update(data).digest();
+  return createHmac("sha256", key).update(data).digest();
 }
 
 /**
@@ -62,7 +62,7 @@ function hmacSha256(key, data) {
  * @returns {string}
  */
 function sha256Hex(data) {
-    return createHash("sha256").update(data).digest("hex");
+  return createHash("sha256").update(data).digest("hex");
 }
 
 /**
@@ -71,26 +71,26 @@ function sha256Hex(data) {
  * @returns {string}
  */
 export function uriEncode(input) {
-    let out = "";
-    // 按 UTF-8 字节序列编码：非 ASCII 字符（如中文）须先展开为 UTF-8 字节再逐字节百分号编码，
-    // 而非把整个 UTF-16 码元当数字编码（前者符合 RFC 3986，后者是非法编码）
-    const bytes = Buffer.from(input, "utf8");
-    for (const b of bytes) {
-        if (
-            (b >= 0x41 && b <= 0x5a) ||
-            (b >= 0x61 && b <= 0x7a) ||
-            (b >= 0x30 && b <= 0x39) ||
-            b === 0x2d ||
-            b === 0x5f ||
-            b === 0x2e ||
-            b === 0x7e
-        ) {
-            out += String.fromCharCode(b);
-        } else {
-            out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
-        }
+  let out = "";
+  // 按 UTF-8 字节序列编码：非 ASCII 字符（如中文）须先展开为 UTF-8 字节再逐字节百分号编码，
+  // 而非把整个 UTF-16 码元当数字编码（前者符合 RFC 3986，后者是非法编码）
+  const bytes = Buffer.from(input, "utf8");
+  for (const b of bytes) {
+    if (
+      (b >= 0x41 && b <= 0x5a) ||
+      (b >= 0x61 && b <= 0x7a) ||
+      (b >= 0x30 && b <= 0x39) ||
+      b === 0x2d ||
+      b === 0x5f ||
+      b === 0x2e ||
+      b === 0x7e
+    ) {
+      out += String.fromCharCode(b);
+    } else {
+      out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
     }
-    return out;
+  }
+  return out;
 }
 
 /**
@@ -108,38 +108,38 @@ export function uriEncode(input) {
  * @returns {{ authorization: string, xDate: string, xContentSha256: string }}
  */
 export function signVolcengine(ak, sk, region, query, body, now = new Date()) {
-    const xDate = now
-        .toISOString()
-        .replace(/[-:]/g, "")
-        .replace(/\.\d{3}/, "");
-    const shortDate = xDate.slice(0, 8);
-    const bodyHash = sha256Hex(body);
+  const xDate = now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
+  const shortDate = xDate.slice(0, 8);
+  const bodyHash = sha256Hex(body);
 
-    const NL = "\n";
-    const canonicalHeaders =
-        `host:${HOST}${NL}` +
-        `x-date:${xDate}${NL}` +
-        `x-content-sha256:${bodyHash}${NL}` +
-        `content-type:application/json; charset=utf-8${NL}`;
-    const signedHeaders = "host;x-date;x-content-sha256;content-type";
-    const canonicalRequest = `POST\n/\n${query}\n${canonicalHeaders}\n${signedHeaders}\n${bodyHash}`;
+  const NL = "\n";
+  const canonicalHeaders =
+    `host:${HOST}${NL}` +
+    `x-date:${xDate}${NL}` +
+    `x-content-sha256:${bodyHash}${NL}` +
+    `content-type:application/json; charset=utf-8${NL}`;
+  const signedHeaders = "host;x-date;x-content-sha256;content-type";
+  const canonicalRequest = `POST\n/\n${query}\n${canonicalHeaders}\n${signedHeaders}\n${bodyHash}`;
 
-    const credentialScope = `${shortDate}/${region}/${SERVICE}/request`;
-    const stringToSign = `HMAC-SHA256\n${xDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
+  const credentialScope = `${shortDate}/${region}/${SERVICE}/request`;
+  const stringToSign = `HMAC-SHA256\n${xDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
 
-    const kDate = hmacSha256(sk, shortDate);
-    const kRegion = hmacSha256(kDate, region);
-    const kService = hmacSha256(kRegion, SERVICE);
-    const kSigning = hmacSha256(kService, "request");
-    const signature = hmacSha256(kSigning, stringToSign).toString("hex");
+  const kDate = hmacSha256(sk, shortDate);
+  const kRegion = hmacSha256(kDate, region);
+  const kService = hmacSha256(kRegion, SERVICE);
+  const kSigning = hmacSha256(kService, "request");
+  const signature = hmacSha256(kSigning, stringToSign).toString("hex");
 
-    return {
-        authorization:
-            `HMAC-SHA256 Credential=${ak}/${credentialScope}, ` +
-            `SignedHeaders=${signedHeaders}, Signature=${signature}`,
-        xDate,
-        xContentSha256: bodyHash,
-    };
+  return {
+    authorization:
+      `HMAC-SHA256 Credential=${ak}/${credentialScope}, ` +
+      `SignedHeaders=${signedHeaders}, Signature=${signature}`,
+    xDate,
+    xContentSha256: bodyHash,
+  };
 }
 
 // #endregion 签名工具 --------------------------------
@@ -152,13 +152,13 @@ export function signVolcengine(ak, sk, region, query, body, now = new Date()) {
  * @returns {string}
  */
 export function buildCanonicalQuery(action) {
-    const pairs = [
-        ["Action", action],
-        ["Region", REGION],
-        ["Version", VERSION],
-    ];
-    pairs.sort((a, b) => a[0].localeCompare(b[0]));
-    return pairs.map(([k, v]) => `${uriEncode(k)}=${uriEncode(v)}`).join("&");
+  const pairs = [
+    ["Action", action],
+    ["Region", REGION],
+    ["Version", VERSION],
+  ];
+  pairs.sort((a, b) => a[0].localeCompare(b[0]));
+  return pairs.map(([k, v]) => `${uriEncode(k)}=${uriEncode(v)}`).join("&");
 }
 
 /**
@@ -170,47 +170,47 @@ export function buildCanonicalQuery(action) {
  * @returns {Promise<object>}
  */
 async function callOpenApi(action, ak, sk) {
-    const canonicalQuery = buildCanonicalQuery(action);
-    const body = "";
-    const { authorization, xDate, xContentSha256 } = signVolcengine(
-        ak,
-        sk,
-        REGION,
-        canonicalQuery,
-        body,
-    );
+  const canonicalQuery = buildCanonicalQuery(action);
+  const body = "";
+  const { authorization, xDate, xContentSha256 } = signVolcengine(
+    ak,
+    sk,
+    REGION,
+    canonicalQuery,
+    body,
+  );
 
-    const resp = await fetchWithTimeout(`https://${HOST}/?${canonicalQuery}`, {
-        method: "POST",
-        headers: {
-            "X-Date": xDate,
-            "X-Content-Sha256": xContentSha256,
-            "Content-Type": "application/json; charset=utf-8",
-            Authorization: authorization,
-        },
-        body,
-    });
+  const resp = await fetchWithTimeout(`https://${HOST}/?${canonicalQuery}`, {
+    method: "POST",
+    headers: {
+      "X-Date": xDate,
+      "X-Content-Sha256": xContentSha256,
+      "Content-Type": "application/json; charset=utf-8",
+      Authorization: authorization,
+    },
+    body,
+  });
 
-    if (!resp.ok) {
-        const text = await resp.text();
-        let detail = "";
-        try {
-            const e = (JSON.parse(text).ResponseMetadata || {}).Error;
-            if (e) {
-                detail = ` (${e.Code}: ${e.Message})`;
-            }
-        } catch {
-            /* 忽略 */
-        }
-        throw new Error(`${httpStatusError(resp.status)}${detail}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    let detail = "";
+    try {
+      const e = (JSON.parse(text).ResponseMetadata || {}).Error;
+      if (e) {
+        detail = ` (${e.Code}: ${e.Message})`;
+      }
+    } catch {
+      /* 忽略 */
     }
+    throw new Error(`${httpStatusError(resp.status)}${detail}`);
+  }
 
-    const data = await readJsonResponse(resp);
-    const meta = data.ResponseMetadata;
-    if (meta?.Error) {
-        throw new Error(`${meta.Error.Code}: ${meta.Error.Message}`);
-    }
-    return data;
+  const data = await readJsonResponse(resp);
+  const meta = data.ResponseMetadata;
+  if (meta?.Error) {
+    throw new Error(`${meta.Error.Code}: ${meta.Error.Message}`);
+  }
+  return data;
 }
 
 /**
@@ -230,17 +230,17 @@ async function callOpenApi(action, ak, sk) {
  * @returns {TierItem[]}
  */
 export function parseCodingPlanResponse(data) {
-    const result = data.Result || data;
-    const windows = result.QuotaUsage;
-    if (!Array.isArray(windows)) {
-        return [];
-    }
+  const result = data.Result || data;
+  const windows = result.QuotaUsage;
+  if (!Array.isArray(windows)) {
+    return [];
+  }
 
-    return windows.map((item) => ({
-        label: (item.Level || "").toLowerCase(),
-        percent: parseFloat(item.Percent ?? 0),
-        resetTimestamp: item.ResetTimestamp ?? null,
-    }));
+  return windows.map((item) => ({
+    label: (item.Level || "").toLowerCase(),
+    percent: parseFloat(item.Percent ?? 0),
+    resetTimestamp: item.ResetTimestamp ?? null,
+  }));
 }
 
 /**
@@ -253,38 +253,38 @@ export function parseCodingPlanResponse(data) {
  * @returns {{ planType: string | null, tiers: TierItem[] }}
  */
 export function parseAfpResponse(data) {
-    const result = data.Result || data;
-    const planType = result.PlanType ? String(result.PlanType).trim() : null;
+  const result = data.Result || data;
+  const planType = result.PlanType ? String(result.PlanType).trim() : null;
 
-    /** @type {TierItem[]} */
-    const tiers = [];
+  /** @type {TierItem[]} */
+  const tiers = [];
 
-    for (const [field, label] of [
-        ["AFPFiveHour", "session"],
-        ["AFPWeekly", "weekly"],
-        ["AFPMonthly", "monthly"],
-    ]) {
-        const window = result[field];
-        if (!window) {
-            continue;
-        }
-
-        const quota = parseFloat(window.Quota ?? 0);
-        if (quota <= 0) {
-            continue;
-        }
-
-        tiers.push({
-            label,
-            percent: Math.min(
-                (parseFloat(window.Used ?? 0) / quota) * 100,
-                100,
-            ),
-            resetTimestamp: window.ResetTime || null,
-        });
+  for (const [field, label] of [
+    ["AFPFiveHour", "session"],
+    ["AFPWeekly", "weekly"],
+    ["AFPMonthly", "monthly"],
+  ]) {
+    const window = result[field];
+    if (!window) {
+      continue;
     }
 
-    return { planType, tiers };
+    const quota = parseFloat(window.Quota ?? 0);
+    if (quota <= 0) {
+      continue;
+    }
+
+    tiers.push({
+      label,
+      percent: Math.min(
+        (parseFloat(window.Used ?? 0) / quota) * 100,
+        100,
+      ),
+      resetTimestamp: window.ResetTime || null,
+    });
+  }
+
+  return { planType, tiers };
 }
 
 // #endregion API 调用 --------------------------------
@@ -306,43 +306,43 @@ export function parseAfpResponse(data) {
  * }>}
  */
 async function fetchPlanUsage(ak, sk, type) {
-    const apiAction =
-        type === TYPE.CODING ? "GetCodingPlanUsage" : "GetAFPUsage";
-    const data = await callOpenApi(apiAction, ak, sk);
+  const apiAction =
+    type === TYPE.CODING ? "GetCodingPlanUsage" : "GetAFPUsage";
+  const data = await callOpenApi(apiAction, ak, sk);
 
-    const tiers =
-        type === TYPE.CODING
-            ? parseCodingPlanResponse(data)
-            : parseAfpResponse(data).tiers;
+  const tiers =
+    type === TYPE.CODING
+      ? parseCodingPlanResponse(data)
+      : parseAfpResponse(data).tiers;
 
-    if (!tiers || tiers.length === 0) {
-        throw new Error(NO_ACTIVE_PLAN);
+  if (!tiers || tiers.length === 0) {
+    throw new Error(NO_ACTIVE_PLAN);
+  }
+
+  const now = Date.now();
+  /** @param {string} key 窗口标识（session / weekly / monthly） */
+  const getUsage = (key) => {
+    const item = tiers.find((t) => t.label === key);
+    if (!item) {
+      return null;
     }
+    // ark 的 resetTimestamp 是秒级 epoch，个别账号给过毫秒，先统一成毫秒再套共享助手
+    const ts =
+      typeof item.resetTimestamp === "number"
+        ? item.resetTimestamp
+        : parseInt(item.resetTimestamp, 10);
+    const ms = Number.isFinite(ts) && ts > 1e12 ? ts : ts * 1000;
+    return { pct: item.percent, sec: toResetSec(ms, now) };
+  };
 
-    const now = Date.now();
-    /** @param {string} key 窗口标识（session / weekly / monthly） */
-    const getUsage = (key) => {
-        const item = tiers.find((t) => t.label === key);
-        if (!item) {
-            return null;
-        }
-        // ark 的 resetTimestamp 是秒级 epoch，个别账号给过毫秒，先统一成毫秒再套共享助手
-        const ts =
-            typeof item.resetTimestamp === "number"
-                ? item.resetTimestamp
-                : parseInt(item.resetTimestamp, 10);
-        const ms = Number.isFinite(ts) && ts > 1e12 ? ts : ts * 1000;
-        return { pct: item.percent, sec: toResetSec(ms, now) };
-    };
-
-    const usage = {
-        rolling: getUsage("session"),
-        weekly: getUsage("weekly"),
-        monthly: getUsage("monthly"),
-    };
-    // 字段改名/接口更新时主动报错，避免静默渲染三个 -- 让用户以为没用量
-    ensureAnyWindow(usage);
-    return usage;
+  const usage = {
+    rolling: getUsage("session"),
+    weekly: getUsage("weekly"),
+    monthly: getUsage("monthly"),
+  };
+  // 字段改名/接口更新时主动报错，避免静默渲染三个 -- 让用户以为没用量
+  ensureAnyWindow(usage);
+  return usage;
 }
 
 // #endregion 格式适配 --------------------------------
@@ -367,38 +367,38 @@ async function fetchPlanUsage(ak, sk, type) {
  * @returns {Promise<string>} 输出行；隐藏时为空字符串
  */
 export async function queryUsage(options = {}) {
-    // type 同时用于负缓存键（按套餐类型区分缓存）与错误标签选择。
-    // 调用方未指定 type 时先以 CODING 兜底，供 loadConfig/findAccount 这类
-    // 早期错误（还没走到 resolveType）选默认标签
-    const fallbackType = Object.values(TYPE).includes(options.type)
-        ? options.type
-        : TYPE.CODING;
+  // type 同时用于负缓存键（按套餐类型区分缓存）与错误标签选择。
+  // 调用方未指定 type 时先以 CODING 兜底，供 loadConfig/findAccount 这类
+  // 早期错误（还没走到 resolveType）选默认标签
+  const fallbackType = Object.values(TYPE).includes(options.type)
+    ? options.type
+    : TYPE.CODING;
 
-    return runQueryUsage(
-        {
-            key: KEY,
-            defaultLabels: DEFAULT_LABELS[KEY][fallbackType],
-            readCredential: (account) => {
-                const ak = (account.accessKeyId || "").trim();
-                const sk = (account.secretAccessKey || "").trim();
-                // 两项都是必填凭据，任一缺失即视为未配置
-                return ak && sk ? { ak, sk } : "";
-            },
-            missingCredential: "配置缺少 accessKeyId 或 secretAccessKey",
-            // 套餐类型优先级：调用方 type > 账号 type > 默认 coding。
-            // 账号 type 经 normalizeType 归一，配置写 "Agent"/"Coding" 等大小写形式
-            // 不再被静默回退到 coding
-            resolveType: (account) =>
-                Object.values(TYPE).includes(options.type)
-                    ? options.type
-                    : normalizeType(account.type, { fallback: TYPE.CODING }),
-            labels: (account, type) =>
-                resolvePrefixes(account, DEFAULT_LABELS[KEY][type]),
-            cacheKey: (position, type) => `${KEY}:${position}:${type}`,
-            fetchUsage: ({ ak, sk }, type) => fetchPlanUsage(ak, sk, type),
-        },
-        options,
-    );
+  return runQueryUsage(
+    {
+      key: KEY,
+      defaultLabels: DEFAULT_LABELS[KEY][fallbackType],
+      readCredential: (account) => {
+        const ak = (account.accessKeyId || "").trim();
+        const sk = (account.secretAccessKey || "").trim();
+        // 两项都是必填凭据，任一缺失即视为未配置
+        return ak && sk ? { ak, sk } : "";
+      },
+      missingCredential: "配置缺少 accessKeyId 或 secretAccessKey",
+      // 套餐类型优先级：调用方 type > 账号 type > 默认 coding。
+      // 账号 type 经 normalizeType 归一，配置写 "Agent"/"Coding" 等大小写形式
+      // 不再被静默回退到 coding
+      resolveType: (account) =>
+        Object.values(TYPE).includes(options.type)
+          ? options.type
+          : normalizeType(account.type, { fallback: TYPE.CODING }),
+      labels: (account, type) =>
+        resolvePrefixes(account, DEFAULT_LABELS[KEY][type]),
+      cacheKey: (hash, type) => `${KEY}:${hash}:${type}`,
+      fetchUsage: ({ ak, sk }, type) => fetchPlanUsage(ak, sk, type),
+    },
+    options,
+  );
 }
 
 // #endregion 查询入口 --------------------------------
@@ -406,9 +406,9 @@ export async function queryUsage(options = {}) {
 // #region CLI 壳 ----------------
 
 if (isMainModule(import.meta.url)) {
-    await runQueryCli(queryUsage, (parsed) =>
-        DEFAULT_LABELS[KEY][normalizeType(parsed.type, { fallback: TYPE.CODING })],
-    );
+  await runQueryCli(queryUsage, (parsed) =>
+    DEFAULT_LABELS[KEY][normalizeType(parsed.type, { fallback: TYPE.CODING })],
+  );
 }
 
 // #endregion CLI 壳 --------------------------------

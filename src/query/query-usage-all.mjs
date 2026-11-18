@@ -17,12 +17,12 @@
  */
 
 import {
-    KEYS,
-    NO_ACTIVE_PLAN,
-    ERROR_MARK,
-    loadConfig,
-    parseArgs,
-    isMainModule,
+  KEYS,
+  NO_ACTIVE_PLAN,
+  ERROR_MARK,
+  loadConfig,
+  parseArgs,
+  isMainModule,
 } from "../utils/utils-query-usage.mjs";
 import { queryUsage as queryArk } from "./query-usage-ark.mjs";
 import { queryUsage as queryCommandcode } from "./query-usage-commandcode.mjs";
@@ -38,11 +38,11 @@ import { queryUsage as queryQwen } from "./query-usage-qwen.mjs";
  * key 顺序即输出顺序（smart 的匹配顺序与此一致）
  */
 export const QUERY_FNS = Object.freeze({
-    [KEYS.ARK]: queryArk,
-    [KEYS.COMMANDCODE]: queryCommandcode,
-    [KEYS.OLLAMA]: queryOllama,
-    [KEYS.OPENCODE]: queryOpencode,
-    [KEYS.QWEN]: queryQwen,
+  [KEYS.ARK]: queryArk,
+  [KEYS.COMMANDCODE]: queryCommandcode,
+  [KEYS.OLLAMA]: queryOllama,
+  [KEYS.OPENCODE]: queryOpencode,
+  [KEYS.QWEN]: queryQwen,
 });
 
 /**
@@ -67,34 +67,34 @@ export const QUERY_FNS = Object.freeze({
  * @returns {string} 数据段（行内无 " | " 分隔符时返回整行）
  */
 function msgPart(line) {
-    const i = line.indexOf(" | ");
-    return i === -1 ? line : line.slice(i + 3);
+  const i = line.indexOf(" | ");
+  return i === -1 ? line : line.slice(i + 3);
 }
 
 export function groupOutputs(outputs, { hideOnNoActivePlan = false } = {}) {
-    const valid = [];
-    const invalid = [];
-    for (const s of outputs) {
-        if (s === "") {
-            continue;
-        }
-        const msg = msgPart(s);
-        if (hideOnNoActivePlan && msg.includes(ERROR_MARK + NO_ACTIVE_PLAN)) {
-            continue;
-        }
-        if (msg.includes(ERROR_MARK)) {
-            invalid.push(s);
-        } else {
-            valid.push(s);
-        }
+  const valid = [];
+  const invalid = [];
+  for (const s of outputs) {
+    if (s === "") {
+      continue;
     }
-    // 两组都非空时在中间插一个空行分隔；只有一组时直接拼接，避免多余空行
-    const parts = valid;
-    if (invalid.length) {
-        if (parts.length) parts.push("");
-        parts.push(...invalid);
+    const msg = msgPart(s);
+    if (hideOnNoActivePlan && msg.includes(ERROR_MARK + NO_ACTIVE_PLAN)) {
+      continue;
     }
-    return parts.join("\n");
+    if (msg.includes(ERROR_MARK)) {
+      invalid.push(s);
+    } else {
+      valid.push(s);
+    }
+  }
+  // 两组都非空时在中间插一个空行分隔；只有一组时直接拼接，避免多余空行
+  const parts = valid;
+  if (invalid.length) {
+    if (parts.length) parts.push("");
+    parts.push(...invalid);
+  }
+  return parts.join("\n");
 }
 
 /**
@@ -112,34 +112,34 @@ export function groupOutputs(outputs, { hideOnNoActivePlan = false } = {}) {
  * @returns {Promise<string>} 多行输出（空行已过滤，无换行结尾）
  */
 export async function queryAll(options = {}) {
-    const { hideOnNoActivePlan = false } = options;
-    let cfg;
-    try {
-        // 复用调用方已读的 config，避免重复 loadConfig；未提供时自行读取
-        cfg = options._config || loadConfig();
-    } catch (err) {
-        return `${ERROR_MARK}${err.message}`;
+  const { hideOnNoActivePlan = false } = options;
+  let cfg;
+  try {
+    // 复用调用方已读的 config，避免重复 loadConfig；未提供时自行读取
+    cfg = options._config || loadConfig();
+  } catch (err) {
+    return `${ERROR_MARK}${err.message}`;
+  }
+
+  /** @type {Promise<string>[]} */
+  const tasks = [];
+
+  for (const [key, queryFn] of Object.entries(QUERY_FNS)) {
+    const accounts = cfg[key];
+    if (!Array.isArray(accounts)) {
+      continue;
     }
 
-    /** @type {Promise<string>[]} */
-    const tasks = [];
-
-    for (const [key, queryFn] of Object.entries(QUERY_FNS)) {
-        const accounts = cfg[key];
-        if (!Array.isArray(accounts)) {
-            continue;
-        }
-
-        for (let i = 0; i < accounts.length; i++) {
-            tasks.push(queryFn({ ...options, _config: cfg, position: i }));
-        }
+    for (let i = 0; i < accounts.length; i++) {
+      tasks.push(queryFn({ ...options, _config: cfg, position: i }));
     }
+  }
 
-    if (tasks.length === 0) {
-        return `${ERROR_MARK}未找到可查询的账号`;
-    }
+  if (tasks.length === 0) {
+    return `${ERROR_MARK}未找到可查询的账号`;
+  }
 
-    return groupOutputs(await Promise.all(tasks), { hideOnNoActivePlan });
+  return groupOutputs(await Promise.all(tasks), { hideOnNoActivePlan });
 }
 
 // #endregion 查询入口 --------------------------------
@@ -147,22 +147,22 @@ export async function queryAll(options = {}) {
 // #region CLI 壳 ----------------
 
 async function main() {
-    try {
-        const { display, hideOnMonthlyExhausted, hideOnNoActivePlan } =
-            parseArgs(process.argv);
-        const output = await queryAll({
-            display,
-            hideOnMonthlyExhausted,
-            hideOnNoActivePlan,
-        });
-        process.stdout.write(output);
-    } catch (err) {
-        process.stdout.write(`${ERROR_MARK}${err.message}\n`);
-    }
+  try {
+    const { display, hideOnMonthlyExhausted, hideOnNoActivePlan } =
+      parseArgs(process.argv);
+    const output = await queryAll({
+      display,
+      hideOnMonthlyExhausted,
+      hideOnNoActivePlan,
+    });
+    process.stdout.write(output);
+  } catch (err) {
+    process.stdout.write(`${ERROR_MARK}${err.message}\n`);
+  }
 }
 
 if (isMainModule(import.meta.url)) {
-    main();
+  main();
 }
 
 // #endregion CLI 壳 --------------------------------

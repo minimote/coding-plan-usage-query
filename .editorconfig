@@ -1,0 +1,74 @@
+# ==================================================
+# EditorConfig 范本
+# 说明：本文件只约束编辑器行为；Git 侧的行尾由 .gitattributes 决定。
+# 两者需保持一致，否则会出现"编辑器保存后 git 报变更"的噪音。
+# ==================================================
+
+root = true
+
+
+# ==================================================
+# 全局
+# ==================================================
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+
+# ==================================================
+# Windows 批处理：必须 CRLF；必须纯 ASCII、无 BOM
+# cmd.exe 按当前控制台代码页逐字节解析 .cmd，非 ASCII 会随代码页变化而错位。
+# 需要中文输出时，改为「纯 ASCII 的 .cmd 启动器 + 同名 .ps1 实现」。
+# ==================================================
+[*.{bat,cmd}]
+end_of_line = crlf
+charset = utf-8
+
+
+# ==================================================
+# PowerShell：必须 UTF-8 with BOM；行尾与全局一致用 LF
+# Windows PowerShell 5.1 无 BOM 时回退到 ANSI(GBK) 解码，中文会静默乱码或语法报错。
+# PS 逐行解析，LF 不影响续行和 here-string，故不单独覆盖 end_of_line。
+# ==================================================
+[*.{ps1,psm1,psd1}]
+charset = utf-8-bom
+
+
+# ==================================================
+# 缩进 2 空格
+# ==================================================
+[*.{js,mjs,cjs,ts,tsx,jsx,json,jsonc,yml,yaml,html,css,scss,less,xml,md,markdown}]
+indent_size = 2
+
+
+# ==================================================
+# 缩进 4 空格
+# ==================================================
+[*.{c,h,cpp,cc,cxx,hpp,java,kt,kts,cs}]
+indent_size = 4
+
+
+# ==================================================
+# Makefile：必须制表符
+# ==================================================
+[{Makefile,makefile,GNUmakefile,*.mak,*.mk}]
+indent_style = tab
+
+
+# ==================================================
+# Markdown：保留行尾空格
+# ==================================================
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+
+# ==================================================
+# 不应改写的内容
+# ==================================================
+[*.{pdf,docx,xlsx,pptx,png,jpg,jpeg,gif,ico,zip,exe,class,jar,lnk}]
+insert_final_newline = false
+trim_trailing_whitespace = false

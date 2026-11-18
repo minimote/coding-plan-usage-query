@@ -1,9 +1,8 @@
-# CodingPlan Usage Query
-
 <div align="center">
 
-<img src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?logo=nodedotjs&logoColor=white" alt="Node.js 22.13+ required">
-<img src="https://img.shields.io/github/license/minimote/coding-plan-usage-query?color=blue&label=%C2%A9%20License" alt="License">
+# Coding Plan Usage Query
+
+<a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?logo=nodedotjs&logoColor=white" alt="Node.js 22.13+ required"></a> <a href="../LICENSE"><img src="https://img.shields.io/github/license/minimote/coding-plan-usage-query?color=blue&label=%C2%A9%20License" alt="License"></a>
 
 </div>
 
@@ -17,17 +16,17 @@
 
 <p>
 
-> Query Coding Plan usage and reset countdown across platforms. Recommended for use with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) custom commands, displayed in the Claude Code status bar.
+> Query Coding Plan usage and reset countdown across platforms. Can be used with [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) custom commands, displayed in the Claude Code status bar; automatically detects the current [CC Switch](https://github.com/farion1231/cc-switch) provider and adapts to the terminal width.
 
 ## Supported Plans
 
-|                  Plan                   |        How to get data        |
-| :-------------------------------------: | :---------------------------: |
-| Volcengine Ark Coding Plan / Agent Plan |  Volcengine OpenAPI (AK/SK)   |
-|               CommandCode               |         Internal API          |
-|              Ollama Cloud               |  HTML page parsing (cookie)   |
-|               OpenCode Go               |         Internal API          |
-|      Alibaba Cloud Qwen Token Plan      | Console internal API (cookie) |
+|                  Plan                   |      How to get data       |
+| :-------------------------------------: | :------------------------: |
+| Volcengine Ark Coding Plan / Agent Plan | Volcengine OpenAPI (AK/SK) |
+|               CommandCode               |        Internal API        |
+|              Ollama Cloud               | HTML page parsing (cookie) |
+|               OpenCode Go               |        Internal API        |
+|      Alibaba Cloud Qwen Token Plan      |   Internal API (cookie)    |
 
 ## Preview
 
@@ -70,11 +69,11 @@ coding-plan-usage-query/
 │   │   ├── get-actual-provider-name.mjs   # Get actual provider name
 │   │   └── preview.mjs                    # Generate mock usage preview output
 │   └── utils/
-│       ├── utils-cc-switch.mjs            # CC-Switch utilities
+│       ├── utils-cc-switch.mjs            # CC Switch utilities
 │       ├── utils-login.mjs                # Shared login logic (Playwright, profile, config writeback)
 │       └── utils-query-usage.mjs          # Shared utilities
 ├── test/                                  # Unit tests (node --test)
-└── tmp/                                   # Query result cache and login profiles (auto-generated, gitignored)
+└── tmp/                                   # Query result cache, no-active-plan state and login profiles (auto-generated, gitignored)
 ```
 
 Each query script follows a "exported function + CLI shell" dual-entry pattern: it can be run directly with `node`, and is also called in-process by `smart`/`all` to avoid child-process startup overhead.
@@ -144,13 +143,13 @@ node src/tools/preview.mjs
 
 Query scripts support the following arguments:
 
-|           Argument            | Short | Description                                                                                                                                |
-| :---------------------------: | :---: | ------------------------------------------------------------------------------------------------------------------------------------------ |
-|          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                                                         |
-|           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (`c`) / `agent` (`a`); falls back to the account's `type`, then `coding` (ignored by all/smart scripts) |
-|         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                    |
-| `--hide-on-monthly-exhausted` |   -   | Hide this query's output when monthly quota is exhausted (`true`/`false`, default `false`; ignored by the smart script)                    |
-|  `--hide-on-no-active-plan`   |   -   | Hide this query's output when there is no active plan (`true`/`false`, default `false`; only effective for the `all` script)               |
+|           Argument            | Short | Description                                                                                                                                                                                                                                                                                                            |
+| :---------------------------: | :---: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|          `--display`          | `-d`  | Display mode: `auto` (default, `a`) / `long` (`l`) / `short` (`s`)                                                                                                                                                                                                                                                     |
+|           `--type`            | `-t`  | Volcengine Ark plan type: `coding` (`c`) / `agent` (`a`); falls back to the account's `type`, then `coding` (ignored by all/smart scripts)                                                                                                                                                                             |
+|         `--position`          | `-p`  | Account position (0-indexed, default 0)                                                                                                                                                                                                                                                                                |
+| `--hide-on-monthly-exhausted` |   -   | Hide this query's output when monthly quota is exhausted (`true`/`false`, default `false`; ignored by the smart script)                                                                                                                                                                                                |
+|  `--hide-on-no-active-plan`   |   -   | Hide this query when there is no active plan (`true`/`false`, default `false`): when `true`, transient errors for accounts recently confirmed to have no active plan are also hidden, and the `all` script additionally filters "no active plan" error lines; ignored by the `smart` script (always treated as `true`) |
 
 > Login scripts (`login-qwen`) only support the `--position`/`-p` argument. `position` ranges 0~N (N = current account count): `< N` updates an existing account, `= N` creates a new one; out-of-range prompts re-entry, and opening the browser asks for confirmation.
 
@@ -162,24 +161,24 @@ Query scripts support the following arguments:
 
 ```json
 {
-    "ark": [
-        {
-            "shortLabel": "Coding",
-            "longLabel": "火山Coding",
-            "apiKey": "xxx",
-            "type": "coding",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        },
-        {
-            "shortLabel": "Agent",
-            "longLabel": "火山Agent",
-            "apiKey": "xxx",
-            "type": "agent",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        }
-    ]
+  "ark": [
+    {
+      "shortLabel": "Coding",
+      "longLabel": "火山Coding",
+      "apiKey": "xxx",
+      "type": "coding",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    },
+    {
+      "shortLabel": "Agent",
+      "longLabel": "火山Agent",
+      "apiKey": "xxx",
+      "type": "agent",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    }
+  ]
 }
 ```
 
@@ -189,7 +188,7 @@ Query scripts support the following arguments:
 | `longLabel` / `shortLabel` |    No    | Display label, defaults to `火山Coding`/`Coding` or `火山Agent`/`Agent` |
 |       `accessKeyId`        |   Yes    | Volcengine AccessKey ID                                                 |
 |     `secretAccessKey`      |   Yes    | Volcengine SecretAccessKey                                              |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                          |
+|          `apiKey`          |    No    | CC Switch API Key for matching current account                          |
 
 Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accounts need `AccessKeySelfManageAccess` and `ArkReadOnlyAccess` permissions).
 
@@ -197,13 +196,13 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 ```json
 {
-    "commandcode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "CommandCode",
-            "longLabel": "CommandCode"
-        }
-    ]
+  "commandcode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "CommandCode",
+      "longLabel": "CommandCode"
+    }
+  ]
 }
 ```
 
@@ -216,14 +215,14 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 ```json
 {
-    "ollama": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Ollama",
-            "longLabel": "Ollama",
-            "cookie": "xxx"
-        }
-    ]
+  "ollama": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Ollama",
+      "longLabel": "Ollama",
+      "cookie": "xxx"
+    }
+  ]
 }
 ```
 
@@ -231,7 +230,7 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 | :------------------------: | :------: | :------------------------------------------------------------------- |
 | `longLabel` / `shortLabel` |    No    | Display label, defaults to `Ollama`/`Ollama`                         |
 |          `cookie`          |   Yes    | Value of the `__Secure-session` cookie, copied from browser DevTools |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                       |
+|          `apiKey`          |    No    | CC Switch API Key for matching current account                       |
 
 > Ollama login is protected by Cloudflare bot detection. Playwright-launched browsers are flagged as automated and cannot pass verification, so no login script is provided. After logging in at <https://ollama.com>, copy the value of `__Secure-session` from browser DevTools -> Application -> Cookies into the config.
 
@@ -239,33 +238,33 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 
 ```json
 {
-    "opencode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Go",
-            "longLabel": "OpenCode Go"
-        }
-    ]
+  "opencode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Go",
+      "longLabel": "OpenCode Go"
+    }
+  ]
 }
 ```
 
 |           Field            | Required | Description                                     |
 | :------------------------: | :------: | :---------------------------------------------- |
 | `longLabel` / `shortLabel` |    No    | Display label, defaults to `OpenCode Go`/`Go`   |
-|          `apiKey`          |   Yes    | OpenCode Go API Key, same value as in CC-Switch |
+|          `apiKey`          |   Yes    | OpenCode Go API Key, same value as in CC Switch |
 
 ### Alibaba Cloud Qwen Token Plan
 
 ```json
 {
-    "qwen": [
-        {
-            "shortLabel": "千问",
-            "longLabel": "千问",
-            "apiKey": "xxx",
-            "cookie": "xxx"
-        }
-    ]
+  "qwen": [
+    {
+      "shortLabel": "千问",
+      "longLabel": "千问",
+      "apiKey": "xxx",
+      "cookie": "xxx"
+    }
+  ]
 }
 ```
 
@@ -273,13 +272,13 @@ Create an AccessKey at <https://console.volcengine.com/iam/keymanage> (sub-accou
 | :------------------------: | :------: | ------------------------------------------------------------------ |
 | `longLabel` / `shortLabel` |    No    | Display label, defaults to `千问`/`千问`                           |
 |          `cookie`          |   Yes    | Qwen console login cookie, auto-filled by running `login-qwen.cmd` |
-|          `apiKey`          |    No    | CC-Switch API Key for matching current account                     |
+|          `apiKey`          |    No    | CC Switch API Key for matching current account                     |
 
 ## Auto-Match Account
 
 `query-usage-smart.mjs` workflow:
 
-1. Determine the mode first: when the `CC_SWITCH_PROVIDER_ID` env var from [CC Launcher](#related-projects) is set, or the client's `ANTHROPIC_BASE_URL` is not a local address, treat it as a direct instance — prioritize `CC_SWITCH_PROVIDER_ID` and fall back to `currentProviderClaude` from `~/.cc-switch/settings.json` when the id is missing, not found, or the database read fails. Otherwise read `~/.cc-switch/live-state.json`: Aggregation mode (`stack.enabled`) has no single provider, so every account in `config.json` is queried; Routing mode looks up its `proxy_route` in the database; Direct mode falls back to the two sources above
+1. Determine the mode first: when the `CC_SWITCH_PROVIDER_ID` env var from [CC Launcher](#related-projects) is set, or the client's `ANTHROPIC_BASE_URL` is not a local address, treat it as a direct instance — prioritize `CC_SWITCH_PROVIDER_ID` and fall back to `currentProviderClaude` from `~/.cc-switch/settings.json` when the row is not found or the database read fails. Otherwise read `~/.cc-switch/live-state.json`: Aggregation mode (`stack.enabled`) has no single provider, so every account in `config.json` is queried; Routing mode looks up its `proxy_route` in the database; Direct mode falls back to the two sources above
 2. Get the current provider's API Key (prioritize env vars `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`; fall back to `~/.cc-switch/cc-switch.db` in proxy mode)
 3. Match the account with the same `apiKey` in `config.json`
 4. Call the corresponding query function in-process
@@ -288,8 +287,9 @@ Notes:
 
 - When a free model is detected or no matching account is found, all accounts are displayed instead
 - Aggregation mode has no single provider, so all accounts in `config.json` are displayed
+- After an account returns "no active plan" once, it is treated as inactive for 24 hours even if later queries hit transient errors; cleared automatically when usage is found again (`tmp/no-active-state.json`)
 - Query results are cached for 5 seconds, and error results for 30 seconds (`tmp/cache-usage.json`), to reduce API calls under frequent refreshes
-- Running the sub-scripts manually does not use the cache
+- Running the sub-scripts manually does not use the result cache (5 s / 30 s), but the no-active-plan state (`tmp/no-active-state.json`) is still read and written, which may affect hiding for the next 24 hours
 
 ## Usage with ccstatusline / ccstatusline-zh
 
@@ -306,6 +306,6 @@ node F:/xxx/query-usage-smart.mjs
 
 ## Related Projects
 
-- **CC Launcher** ([Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)): Launch Claude Code with a specified CC-Switch provider; multiple instances using different providers can run simultaneously without affecting the global active state.
+- **CC Launcher** ([Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)): Launch Claude Code with a specified CC Switch provider; multiple instances using different providers can run simultaneously without affecting the global active state.
 
 ## [MIT License](../LICENSE)

@@ -1,18 +1,17 @@
 /**
  * @file 缓存读写单元测试
  *
- * 缓存文件路径在 utils-query-usage.mjs 内由 import.meta.url 计算得到，
- * 指向项目根目录 tmp/cache-usage.json，本测试直接清理该文件后验证
- * 读-改-写、TTL 过期、负缓存、倒计时偏移等行为
+ * 缓存路径通过 CC_USAGE_CACHE_PATH 重定向到临时目录，避免清理真实生产缓存，
+ * 本文件验证读-改-写、TTL 过期、负缓存、倒计时偏移等行为
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-    mkdtempSync,
-    readFileSync,
-    writeFileSync,
-    rmSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -24,242 +23,275 @@ process.env.CC_USAGE_CACHE_PATH = join(CACHE_DIR, "cache-usage.json");
 const CACHE_PATH = process.env.CC_USAGE_CACHE_PATH;
 
 import {
-    readCache,
-    writeCache,
-    fetchUsageCached,
-    CACHE_TTL_MS,
-    NEG_CACHE_TTL_MS,
+  readCache,
+  writeCache,
+  fetchUsageCached,
+  CACHE_TTL_MS,
+  NEG_CACHE_TTL_MS,
 } from "../src/utils/utils-query-usage.mjs";
 
 function clearCache() {
-    rmSync(CACHE_PATH, { force: true });
+  rmSync(CACHE_PATH, { force: true });
 }
 
 test.before(() => {
-    clearCache();
+  clearCache();
 });
 
 test("readCache: 空缓存返回 null", () => {
-    clearCache();
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("writeCache -> readCache: 写入后立即可读", () => {
-    clearCache();
-    const usage = {
-        rolling: { pct: 50, sec: 1800 },
-        weekly: { pct: 30, sec: 500000 },
-        monthly: { pct: 80, sec: 2000000 },
-    };
-    writeCache("ark:0:coding", { usage });
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    // readCache 会扣去已流逝毫秒，故 sec 用近似比较
-    assert.equal(hit.usage.rolling.pct, 50);
-    assert.ok(Math.abs(hit.usage.rolling.sec - 1800) < 1);
-    assert.equal(hit.usage.weekly.pct, 30);
-    assert.ok(Math.abs(hit.usage.weekly.sec - 500000) < 1);
-    assert.equal(hit.usage.monthly.pct, 80);
-    assert.ok(Math.abs(hit.usage.monthly.sec - 2000000) < 1);
+  clearCache();
+  const usage = {
+    rolling: { pct: 50, sec: 1800 },
+    weekly: { pct: 30, sec: 500000 },
+    monthly: { pct: 80, sec: 2000000 },
+  };
+  writeCache("ark:0:coding", { usage });
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  // readCache 会扣去已流逝毫秒，故 sec 用近似比较
+  assert.equal(hit.usage.rolling.pct, 50);
+  assert.ok(Math.abs(hit.usage.rolling.sec - 1800) < 1);
+  assert.equal(hit.usage.weekly.pct, 30);
+  assert.ok(Math.abs(hit.usage.weekly.sec - 500000) < 1);
+  assert.equal(hit.usage.monthly.pct, 80);
+  assert.ok(Math.abs(hit.usage.monthly.sec - 2000000) < 1);
 });
 
 test("readCache: 保留原始键结构，不为缺失的窗口造 null（千问无 monthly）", () => {
-    clearCache();
-    // 千问 usage 只有 rolling/weekly，无 monthly 键
-    writeCache("qwen:0", {
-        usage: {
-            rolling: { pct: 50, sec: 1800 },
-            weekly: { pct: 30, sec: 500000 },
-        },
-    });
-    const hit = readCache("qwen:0");
-    assert.ok(hit);
-    assert.equal(hit.usage.rolling.pct, 50);
-    assert.equal(hit.usage.weekly.pct, 30);
-    // 关键：不应凭空造出 monthly 键（修复前 readCache 硬编码三窗口会造出 null）
-    assert.equal("monthly" in hit.usage, false);
+  clearCache();
+  // 千问 usage 只有 rolling/weekly，无 monthly 键
+  writeCache("qwen:0", {
+    usage: {
+      rolling: { pct: 50, sec: 1800 },
+      weekly: { pct: 30, sec: 500000 },
+    },
+  });
+  const hit = readCache("qwen:0");
+  assert.ok(hit);
+  assert.equal(hit.usage.rolling.pct, 50);
+  assert.equal(hit.usage.weekly.pct, 30);
+  // 关键：不应凭空造出 monthly 键（修复前 readCache 硬编码三窗口会造出 null）
+  assert.equal("monthly" in hit.usage, false);
 });
 
 test("readCache: 倒计时扣除已流逝秒数", () => {
-    clearCache();
-    writeCache("ark:0:coding", {
-        usage: {
-            rolling: { pct: 50, sec: 100 },
-            weekly: { pct: 30, sec: 200 },
-            monthly: null,
-        },
-    });
-    // 回写一个 3 秒前的条目模拟已流逝时间
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    raw["ark:0:coding"].ts = Date.now() - 3000;
-    writeFileSync(CACHE_PATH, JSON.stringify(raw));
+  clearCache();
+  writeCache("ark:0:coding", {
+    usage: {
+      rolling: { pct: 50, sec: 100 },
+      weekly: { pct: 30, sec: 200 },
+      monthly: null,
+    },
+  });
+  // 回写一个 3 秒前的条目模拟已流逝时间
+  const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  raw["ark:0:coding"].ts = Date.now() - 3000;
+  writeFileSync(CACHE_PATH, JSON.stringify(raw));
 
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    // 100 - 3 ≈ 97（浮点，允许误差）
-    assert.ok(Math.abs(hit.usage.rolling.sec - 97) < 1);
-    assert.ok(Math.abs(hit.usage.weekly.sec - 197) < 1);
-    assert.equal(hit.usage.monthly, null);
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  // 100 - 3 ≈ 97（浮点，允许误差）
+  assert.ok(Math.abs(hit.usage.rolling.sec - 97) < 1);
+  assert.ok(Math.abs(hit.usage.weekly.sec - 197) < 1);
+  assert.equal(hit.usage.monthly, null);
 });
 
-test("readCache: sec 为 null（无重置）读回仍为 null，不误钳成 0", () => {
-    clearCache();
-    writeCache("ark:0:coding", {
-        usage: {
-            rolling: { pct: 50, sec: null },
-            weekly: { pct: 30, sec: 100 },
-            monthly: null,
-        },
-    });
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    assert.equal(hit.usage.rolling.sec, null);
-    assert.ok(Math.abs(hit.usage.weekly.sec - 100) < 1);
+test("readCache: sec 为 null（无重置）读回仍为 null，不误钳制为 0", () => {
+  clearCache();
+  writeCache("ark:0:coding", {
+    usage: {
+      rolling: { pct: 50, sec: null },
+      weekly: { pct: 30, sec: 100 },
+      monthly: null,
+    },
+  });
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  assert.equal(hit.usage.rolling.sec, null);
+  assert.ok(Math.abs(hit.usage.weekly.sec - 100) < 1);
 });
 
-test("readCache: sec 为负数（重置已过）读回保留负数，不钳成 0", () => {
-    clearCache();
-    writeCache("ark:0:coding", {
-        usage: {
-            rolling: { pct: 50, sec: -7200 },
-            weekly: { pct: 30, sec: 100 },
-            monthly: null,
-        },
-    });
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    raw["ark:0:coding"].ts = Date.now() - 3000;
-    writeFileSync(CACHE_PATH, JSON.stringify(raw));
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    // -7200 再减已流逝秒数，仍为负数（原 Math.max 会钳成 0）
-    assert.ok(hit.usage.rolling.sec < 0);
-    assert.ok(Math.abs(hit.usage.weekly.sec - 97) < 1);
+test("readCache: sec 为负数（重置已过）读回保留负数，不钳制为 0", () => {
+  clearCache();
+  writeCache("ark:0:coding", {
+    usage: {
+      rolling: { pct: 50, sec: -7200 },
+      weekly: { pct: 30, sec: 100 },
+      monthly: null,
+    },
+  });
+  const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  raw["ark:0:coding"].ts = Date.now() - 3000;
+  writeFileSync(CACHE_PATH, JSON.stringify(raw));
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  // -7200 再减已流逝秒数，仍为负数（原 Math.max 会钳制为 0）
+  assert.ok(hit.usage.rolling.sec < 0);
+  assert.ok(Math.abs(hit.usage.weekly.sec - 97) < 1);
 });
 
 test("readCache: 负缓存（错误输出）命中", () => {
-    clearCache();
-    writeCache("ark:0:coding", { error: "查询失败" });
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    assert.equal(hit.error, "查询失败");
+  clearCache();
+  writeCache("ark:0:coding", { error: "查询失败" });
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  assert.equal(hit.error, "查询失败");
 });
 
 test("readCache: 负缓存 TTL 长于正缓存，正缓存过期区间内负缓存仍命中", () => {
-    clearCache();
-    writeCache("ark:0:coding", { error: "查询失败" });
-    // 把时间戳改到正缓存 TTL 已过期、负缓存 TTL（30s）尚未过期的区间
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1000;
-    writeFileSync(CACHE_PATH, JSON.stringify(raw));
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit, "负缓存 TTL 内应仍命中");
-    assert.equal(hit.error, "查询失败");
+  clearCache();
+  writeCache("ark:0:coding", { error: "查询失败" });
+  // 把时间戳改到正缓存 TTL 已过期、负缓存 TTL（30s）尚未过期的区间
+  const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1000;
+  writeFileSync(CACHE_PATH, JSON.stringify(raw));
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit, "负缓存 TTL 内应仍命中");
+  assert.equal(hit.error, "查询失败");
 });
 
 test("readCache: 负缓存 TTL 过期返回 null", () => {
-    clearCache();
-    writeCache("ark:0:coding", { error: "查询失败" });
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    raw["ark:0:coding"].ts = Date.now() - NEG_CACHE_TTL_MS - 1;
-    writeFileSync(CACHE_PATH, JSON.stringify(raw));
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  writeCache("ark:0:coding", { error: "查询失败" });
+  const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  raw["ark:0:coding"].ts = Date.now() - NEG_CACHE_TTL_MS - 1;
+  writeFileSync(CACHE_PATH, JSON.stringify(raw));
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("readCache: TTL 过期返回 null", () => {
-    clearCache();
-    writeCache("ark:0:coding", {
-        usage: { rolling: { pct: 1, sec: 1 }, weekly: null, monthly: null },
-    });
-    // 把时间戳改成 TTL 之前
-    const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
-    raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1;
-    writeFileSync(CACHE_PATH, JSON.stringify(raw));
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  writeCache("ark:0:coding", {
+    usage: { rolling: { pct: 1, sec: 1 }, weekly: null, monthly: null },
+  });
+  // 把时间戳改成 TTL 之前
+  const raw = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  raw["ark:0:coding"].ts = Date.now() - CACHE_TTL_MS - 1;
+  writeFileSync(CACHE_PATH, JSON.stringify(raw));
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("readCache: 损坏 JSON 返回 null（自愈）", () => {
-    clearCache();
-    writeFileSync(CACHE_PATH, "not a json {{{");
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  writeFileSync(CACHE_PATH, "not a json {{{");
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("fetchUsageCached: 命中缓存时不调用 fetchFn", async () => {
-    clearCache();
-    writeCache("ark:0:coding", {
-        usage: { rolling: { pct: 50, sec: 1800 }, weekly: null, monthly: null },
-    });
-    let called = false;
-    const result = await fetchUsageCached("ark:0:coding", true, async () => {
-        called = true;
-        return { rolling: { pct: 99, sec: 0 } };
-    });
-    assert.equal(called, false);
-    assert.equal(result.usage.rolling.pct, 50);
+  clearCache();
+  writeCache("ark:0:coding", {
+    usage: { rolling: { pct: 50, sec: 1800 }, weekly: null, monthly: null },
+  });
+  let called = false;
+  const result = await fetchUsageCached("ark:0:coding", true, async () => {
+    called = true;
+    return { rolling: { pct: 99, sec: 0 } };
+  });
+  assert.equal(called, false);
+  assert.equal(result.usage.rolling.pct, 50);
 });
 
 test("fetchUsageCached: 命中负缓存时直接返回错误消息且不调用 fetchFn", async () => {
-    clearCache();
-    writeCache("ark:0:coding", { error: "查询失败" });
-    let called = false;
-    const result = await fetchUsageCached("ark:0:coding", true, async () => {
-        called = true;
-        return { rolling: { pct: 99, sec: 0 }, weekly: null, monthly: null };
-    });
-    assert.equal(called, false);
-    assert.equal(result.error, "查询失败");
-    // 负缓存命中返回 error 而非 usage
-    assert.equal("usage" in result, false);
+  clearCache();
+  writeCache("ark:0:coding", { error: "查询失败" });
+  let called = false;
+  const result = await fetchUsageCached("ark:0:coding", true, async () => {
+    called = true;
+    return { rolling: { pct: 99, sec: 0 }, weekly: null, monthly: null };
+  });
+  assert.equal(called, false);
+  assert.equal(result.error, "查询失败");
+  // 负缓存命中返回 error 而非 usage
+  assert.equal("usage" in result, false);
 });
 
 test("fetchUsageCached: 未命中时调用 fetchFn 并写缓存", async () => {
-    clearCache();
-    let called = false;
-    const result = await fetchUsageCached("ark:0:coding", true, async () => {
-        called = true;
-        return { rolling: { pct: 42, sec: 100 }, weekly: null, monthly: null };
-    });
-    assert.equal(called, true);
-    assert.equal(result.usage.rolling.pct, 42);
-    // 缓存应已写入
-    const hit = readCache("ark:0:coding");
-    assert.ok(hit);
-    assert.equal(hit.usage.rolling.pct, 42);
+  clearCache();
+  let called = false;
+  const result = await fetchUsageCached("ark:0:coding", true, async () => {
+    called = true;
+    return { rolling: { pct: 42, sec: 100 }, weekly: null, monthly: null };
+  });
+  assert.equal(called, true);
+  assert.equal(result.usage.rolling.pct, 42);
+  // 缓存应已写入
+  const hit = readCache("ark:0:coding");
+  assert.ok(hit);
+  assert.equal(hit.usage.rolling.pct, 42);
 });
 
 test("fetchUsageCached: enabled=false 时不读不写缓存", async () => {
-    clearCache();
-    const result = await fetchUsageCached("ark:0:coding", false, async () => ({
-        rolling: { pct: 77, sec: 0 },
-        weekly: null,
-        monthly: null,
-    }));
-    assert.equal(result.usage.rolling.pct, 77);
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  const result = await fetchUsageCached("ark:0:coding", false, async () => ({
+    rolling: { pct: 77, sec: 0 },
+    weekly: null,
+    monthly: null,
+  }));
+  assert.equal(result.usage.rolling.pct, 77);
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("fetchUsageCached: fetchFn 抛错时透传异常、不写缓存", async () => {
-    clearCache();
-    await assert.rejects(
-        fetchUsageCached("ark:0:coding", true, async () => {
-            throw new Error("网络错误");
-        }),
-        /网络错误/,
-    );
-    assert.equal(readCache("ark:0:coding"), null);
+  clearCache();
+  await assert.rejects(
+    fetchUsageCached("ark:0:coding", true, async () => {
+      throw new Error("网络错误");
+    }),
+    /网络错误/,
+  );
+  assert.equal(readCache("ark:0:coding"), null);
 });
 
 test("writeCache: 多键共存于同一文件", () => {
-    clearCache();
-    writeCache("ark:0:coding", { error: "err1" });
-    writeCache("opencode:0", {
-        usage: { rolling: { pct: 1, sec: 1 }, weekly: null, monthly: null },
-    });
-    assert.ok(readCache("ark:0:coding").error);
-    assert.ok(readCache("opencode:0").usage);
+  clearCache();
+  writeCache("ark:0:coding", { error: "err1" });
+  writeCache("opencode:0", {
+    usage: { rolling: { pct: 1, sec: 1 }, weekly: null, monthly: null },
+  });
+  assert.ok(readCache("ark:0:coding").error);
+  assert.ok(readCache("opencode:0").usage);
+});
+
+test("writeCache: 清理过期条目，保留有效条目（含负缓存 TTL 与未来时间戳）", () => {
+  clearCache();
+  const now = Date.now();
+  writeFileSync(
+    CACHE_PATH,
+    JSON.stringify({
+      expired: {
+        ts: now - CACHE_TTL_MS - 1000,
+        usage: { rolling: { pct: 1, sec: 1 } },
+      },
+      fresh: {
+        ts: now,
+        usage: { rolling: { pct: 2, sec: 2 } },
+      },
+      future: {
+        ts: now + 60_000,
+        usage: { rolling: { pct: 3, sec: 3 } },
+      },
+      // 正缓存 TTL 已过、负缓存 TTL 未过：应保留
+      negFresh: { ts: now - CACHE_TTL_MS - 1000, error: "err" },
+      negExpired: { ts: now - NEG_CACHE_TTL_MS - 1000, error: "err" },
+    }),
+  );
+  writeCache("new", { usage: { rolling: { pct: 4, sec: 4 } } });
+  const all = JSON.parse(readFileSync(CACHE_PATH, "utf-8"));
+  assert.equal("expired" in all, false, "正缓存过期条目应被清理");
+  assert.equal("future" in all, false, "未来时间戳条目应被清理");
+  assert.equal("negExpired" in all, false, "负缓存过期条目应被清理");
+  assert.ok(all.fresh, "有效正缓存应保留");
+  assert.ok(all.negFresh, "负缓存 TTL 内的条目应保留");
+  assert.ok(all.new, "新条目应写入");
 });
 
 test.after(() => {
-    clearCache();
-    delete process.env.CC_USAGE_CACHE_PATH;
-    rmSync(CACHE_DIR, { recursive: true, force: true });
+  clearCache();
+  delete process.env.CC_USAGE_CACHE_PATH;
+  rmSync(CACHE_DIR, { recursive: true, force: true });
 });

@@ -16,19 +16,19 @@
  */
 
 import {
-    KEYS,
-    NO_ACTIVE_PLAN,
-    INVALID_API_KEY,
-    BROWSER_UA,
-    DEFAULT_LABELS,
-    ensureAnyWindow,
-    fetchWithTimeout,
-    httpStatusError,
-    isMainModule,
-    readJsonResponse,
-    toResetSec,
-    runQueryCli,
-    runQueryUsage,
+  KEYS,
+  NO_ACTIVE_PLAN,
+  INVALID_API_KEY,
+  BROWSER_UA,
+  DEFAULT_LABELS,
+  ensureAnyWindow,
+  fetchWithTimeout,
+  httpStatusError,
+  isMainModule,
+  readJsonResponse,
+  toResetSec,
+  runQueryCli,
+  runQueryUsage,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -57,28 +57,28 @@ const USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
  * }}
  */
 export function parseUsageResponse(payload, now = Date.now()) {
-    const toWindow = (w) => {
-        if (!w || typeof w !== "object") {
-            return null;
-        }
-        // percent 必须是原始 number：Number() 会把 null/""/false 强转为 0，
-        // 后端对缺失字段返回 null 时会被误算成 0%（未使用）而非丢弃窗口
-        const pct = w.percent;
-        if (typeof pct !== "number" || !Number.isFinite(pct)) {
-            return null;
-        }
-        return {
-            pct,
-            sec: toResetSec(Date.parse(w.resetsAt), now),
-        };
-    };
-
-    const usage = payload?.usage;
+  const toWindow = (w) => {
+    if (!w || typeof w !== "object") {
+      return null;
+    }
+    // percent 必须是原始 number：Number() 会把 null/""/false 强转为 0，
+    // 后端对缺失字段返回 null 时会被误算成 0%（未使用）而非丢弃窗口
+    const pct = w.percent;
+    if (typeof pct !== "number" || !Number.isFinite(pct)) {
+      return null;
+    }
     return {
-        rolling: toWindow(usage?.rolling),
-        weekly: toWindow(usage?.weekly),
-        monthly: toWindow(usage?.monthly),
+      pct,
+      sec: toResetSec(Date.parse(w.resetsAt), now),
     };
+  };
+
+  const usage = payload?.usage;
+  return {
+    rolling: toWindow(usage?.rolling),
+    weekly: toWindow(usage?.weekly),
+    monthly: toWindow(usage?.monthly),
+  };
 }
 
 // #endregion 解析工具 --------------------------------
@@ -100,38 +100,38 @@ export function parseUsageResponse(payload, now = Date.now()) {
  * @throws {Error} key 无效 / 无 Go 订阅 / 结构异常
  */
 async function fetchUsage(apiKey) {
-    const resp = await fetchWithTimeout(USAGE_URL, {
-        headers: {
-            authorization: `Bearer ${apiKey}`,
-            accept: "application/json",
-            "user-agent": BROWSER_UA,
-        },
-        // 不自动跟随 3xx：未鉴权被重定向到登录页要与「200 + 用量响应」区分开
-        redirect: "manual",
-    });
+  const resp = await fetchWithTimeout(USAGE_URL, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: "application/json",
+      "user-agent": BROWSER_UA,
+    },
+    // 不自动跟随 3xx：未鉴权被重定向到登录页要与「200 + 用量响应」区分开
+    redirect: "manual",
+  });
 
-    if (!resp.ok) {
-        const errType = await readErrorType(resp);
-        if (errType === "EntitlementError") {
-            throw new Error(NO_ACTIVE_PLAN);
-        }
-        if (errType === "AuthError" || resp.status === 401) {
-            throw new Error(INVALID_API_KEY);
-        }
-        const location =
-            resp.status >= 300 && resp.status < 400
-                ? resp.headers.get("location")
-                : null;
-        if (location) {
-            throw new Error(`${INVALID_API_KEY}(重定向到 ${location})`);
-        }
-        throw new Error(httpStatusError(resp.status));
+  if (!resp.ok) {
+    const errType = await readErrorType(resp);
+    if (errType === "EntitlementError") {
+      throw new Error(NO_ACTIVE_PLAN);
     }
+    if (errType === "AuthError" || resp.status === 401) {
+      throw new Error(INVALID_API_KEY);
+    }
+    const location =
+      resp.status >= 300 && resp.status < 400
+        ? resp.headers.get("location")
+        : null;
+    if (location) {
+      throw new Error(`${INVALID_API_KEY}(重定向到 ${location})`);
+    }
+    throw new Error(httpStatusError(resp.status));
+  }
 
-    const payload = await readJsonResponse(resp);
-    const usage = parseUsageResponse(payload);
-    ensureAnyWindow(usage);
-    return usage;
+  const payload = await readJsonResponse(resp);
+  const usage = parseUsageResponse(payload);
+  ensureAnyWindow(usage);
+  return usage;
 }
 
 /**
@@ -143,19 +143,19 @@ async function fetchUsage(apiKey) {
  * @returns {Promise<string | null>} 错误类型名，如 "EntitlementError"
  */
 async function readErrorType(resp) {
-    try {
-        const body = await resp.json();
-        const type = body?.error?.type;
-        return typeof type === "string" ? type : null;
-    } catch (err) {
-        // 超时由 AbortSignal.timeout 触发（DOMException name=TimeoutError），吞掉会让
-        // 调用方落到 HTTP 状态码分支报「请求失败(HTTP 5xx)」而非「请求超时」，
-        // 与 readJsonResponse 的处理一致，原样抛
-        if (err?.name === "TimeoutError" || err?.name === "AbortError") {
-            throw err;
-        }
-        return null;
+  try {
+    const body = await resp.json();
+    const type = body?.error?.type;
+    return typeof type === "string" ? type : null;
+  } catch (err) {
+    // 超时由 AbortSignal.timeout 触发（DOMException name=TimeoutError），吞掉会让
+    // 调用方落到 HTTP 状态码分支报「请求失败(HTTP 5xx)」而非「请求超时」，
+    // 与 readJsonResponse 的处理一致，原样抛
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      throw err;
     }
+    return null;
+  }
 }
 
 // #endregion 用量请求 --------------------------------
@@ -176,16 +176,16 @@ async function readErrorType(resp) {
  * @returns {Promise<string>} 输出行；隐藏时为空字符串
  */
 export async function queryUsage(options = {}) {
-    return runQueryUsage(
-        {
-            key: KEY,
-            defaultLabels: DEFAULT_LABELS[KEY],
-            readCredential: (account) => (account.apiKey || "").trim(),
-            missingCredential: "配置缺少 apiKey，请填入 OpenCode Go 的 API Key",
-            fetchUsage,
-        },
-        options,
-    );
+  return runQueryUsage(
+    {
+      key: KEY,
+      defaultLabels: DEFAULT_LABELS[KEY],
+      readCredential: (account) => (account.apiKey || "").trim(),
+      missingCredential: "配置缺少 apiKey，请填入 OpenCode Go 的 API Key",
+      fetchUsage,
+    },
+    options,
+  );
 }
 
 // #endregion 查询入口 --------------------------------
@@ -193,7 +193,7 @@ export async function queryUsage(options = {}) {
 // #region CLI 壳 ----------------
 
 if (isMainModule(import.meta.url)) {
-    await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
+  await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
 }
 
 // #endregion CLI 壳 --------------------------------

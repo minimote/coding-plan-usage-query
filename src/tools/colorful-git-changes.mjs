@@ -29,10 +29,10 @@ const UNTRACKED_MAX_BYTES = 2_000_000;
 
 /** 列改动文件（含未跟踪）的命令 */
 const STATUS_ARGS = [
-    "status",
-    "--porcelain",
-    "-z",
-    "--untracked-files=all",
+  "status",
+  "--porcelain",
+  "-z",
+  "--untracked-files=all",
 ];
 
 /**
@@ -44,25 +44,25 @@ const STATUS_ARGS = [
  * @returns {{files: number, insertions: number, deletions: number}} 缺失或非法时为 0
  */
 export function parseShortStat(stat) {
-    const text = typeof stat === "string" ? stat : "";
-    const num = (re) => {
-        const m = re.exec(text);
-        return m ? Number(m[1]) : 0;
-    };
-    return {
-        files: num(/(\d+)\s+files?\s+changed/),
-        insertions: num(/(\d+)\s+insertions?/),
-        deletions: num(/(\d+)\s+deletions?/),
-    };
+  const text = typeof stat === "string" ? stat : "";
+  const num = (re) => {
+    const m = re.exec(text);
+    return m ? Number(m[1]) : 0;
+  };
+  return {
+    files: num(/(\d+)\s+files?\s+changed/),
+    insertions: num(/(\d+)\s+insertions?/),
+    deletions: num(/(\d+)\s+deletions?/),
+  };
 }
 
 /** 两组统计相加 */
 function addStats(a, b) {
-    return {
-        files: a.files + b.files,
-        insertions: a.insertions + b.insertions,
-        deletions: a.deletions + b.deletions,
-    };
+  return {
+    files: a.files + b.files,
+    insertions: a.insertions + b.insertions,
+    deletions: a.deletions + b.deletions,
+  };
 }
 
 /**
@@ -75,22 +75,22 @@ function addStats(a, b) {
  * @returns {string} 着色后的显示串；无变更时为空串
  */
 export function formatChanges({
-    files = 0,
-    insertions = 0,
-    deletions = 0,
+  files = 0,
+  insertions = 0,
+  deletions = 0,
 }) {
-    const count = files > 0 ? `${COLORS.WHITE}Δ${files}${COLORS.RESET}` : "";
-    let diff = "";
-    if (insertions > 0) {
-        diff += `${COLORS.GREEN}+${insertions}`;
-    }
-    if (deletions > 0) {
-        diff += `${COLORS.RED}-${deletions}`;
-    }
-    if (diff) {
-        diff += COLORS.RESET;
-    }
-    return count + diff;
+  const count = files > 0 ? `${COLORS.WHITE}Δ${files}${COLORS.RESET}` : "";
+  let diff = "";
+  if (insertions > 0) {
+    diff += `${COLORS.GREEN}+${insertions}`;
+  }
+  if (deletions > 0) {
+    diff += `${COLORS.RED}-${deletions}`;
+  }
+  if (diff) {
+    diff += COLORS.RESET;
+  }
+  return count + diff;
 }
 
 /**
@@ -103,23 +103,23 @@ export function formatChanges({
  * @returns {string | null} 标准输出（已 trim）；失败或超时返回 null
  */
 function runGit(cwd, args) {
-    try {
-        return execFileSync("git", args, {
-            cwd,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-            timeout: GIT_TIMEOUT_MS,
-            windowsHide: true,
-            env: {
-                ...process.env,
-                LC_ALL: "C",
-                LANG: "C",
-                GIT_OPTIONAL_LOCKS: "0",
-            },
-        }).trim();
-    } catch {
-        return null;
-    }
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_TIMEOUT_MS,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        LC_ALL: "C",
+        LANG: "C",
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+    }).trim();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -129,13 +129,13 @@ function runGit(cwd, args) {
  * @returns {string[]} 相对路径列表
  */
 function untrackedPaths(statusOut) {
-    if (typeof statusOut !== "string" || statusOut === "") {
-        return [];
-    }
-    return statusOut
-        .split("\0")
-        .filter((entry) => entry.startsWith("?? "))
-        .map((entry) => entry.slice(3));
+  if (typeof statusOut !== "string" || statusOut === "") {
+    return [];
+  }
+  return statusOut
+    .split("\0")
+    .filter((entry) => entry.startsWith("?? "))
+    .map((entry) => entry.slice(3));
 }
 
 /**
@@ -146,25 +146,25 @@ function untrackedPaths(statusOut) {
  * @returns {number}
  */
 function countLines(path, readFile) {
-    try {
-        const buf = readFile(path);
-        if (buf.length === 0 || buf.length > UNTRACKED_MAX_BYTES) {
-            return 0;
-        }
-        // 含 NUL 视为二进制：只计文件数，不计行数
-        if (buf.includes(0)) {
-            return 0;
-        }
-        let lines = 0;
-        for (const byte of buf) {
-            if (byte === 0x0a) {
-                lines += 1;
-            }
-        }
-        return buf[buf.length - 1] === 0x0a ? lines : lines + 1;
-    } catch {
-        return 0;
+  try {
+    const buf = readFile(path);
+    if (buf.length === 0 || buf.length > UNTRACKED_MAX_BYTES) {
+      return 0;
     }
+    // 含 NUL 视为二进制：只计文件数，不计行数
+    if (buf.includes(0)) {
+      return 0;
+    }
+    let lines = 0;
+    for (const byte of buf) {
+      if (byte === 0x0a) {
+        lines += 1;
+      }
+    }
+    return buf[buf.length - 1] === 0x0a ? lines : lines + 1;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -179,50 +179,50 @@ function countLines(path, readFile) {
  * @returns {string} 着色后的显示串
  */
 export function renderFromRaw(raw, git = runGit, readFile = readFileSync) {
-    let data;
-    try {
-        data = JSON.parse(raw);
-    } catch {
-        return "";
-    }
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return "";
+  }
 
-    const cwd = data?.workspace?.current_dir || data?.cwd;
-    if (!cwd) {
-        return "";
-    }
+  const cwd = data?.workspace?.current_dir || data?.cwd;
+  if (!cwd) {
+    return "";
+  }
 
-    // 非 Git 仓库时 git status 直接失败
-    const statusOut = git(cwd, STATUS_ARGS);
-    if (statusOut === null) {
-        return "";
-    }
-    const untracked = untrackedPaths(statusOut);
+  // 非 Git 仓库时 git status 直接失败
+  const statusOut = git(cwd, STATUS_ARGS);
+  if (statusOut === null) {
+    return "";
+  }
+  const untracked = untrackedPaths(statusOut);
 
-    // 与 HEAD 比，已暂存与未暂存的变更都计入；空仓库（无 HEAD）时退到暂存区 + 工作区
-    let stat;
-    const head = git(cwd, ["diff", "HEAD", "--shortstat"]);
-    if (head !== null) {
-        stat = parseShortStat(head);
-    } else {
-        const cached = git(cwd, ["diff", "--cached", "--shortstat"]);
-        const work = git(cwd, ["diff", "--shortstat"]);
-        if (cached === null && work === null) {
-            // 仓库正常但 git 读不到（超时 / 损坏）：给个提示，别和「无变更」混淆
-            return `${COLORS.ORANGE}⚠${COLORS.RESET}`;
-        }
-        stat = addStats(parseShortStat(cached ?? ""), parseShortStat(work ?? ""));
+  // 与 HEAD 比，已暂存与未暂存的变更都计入；空仓库（无 HEAD）时退到暂存区 + 工作区
+  let stat;
+  const head = git(cwd, ["diff", "HEAD", "--shortstat"]);
+  if (head !== null) {
+    stat = parseShortStat(head);
+  } else {
+    const cached = git(cwd, ["diff", "--cached", "--shortstat"]);
+    const work = git(cwd, ["diff", "--shortstat"]);
+    if (cached === null && work === null) {
+      // 仓库正常但 git 读不到（超时 / 损坏）：给个提示，别和「无变更」混淆
+      return `${COLORS.ORANGE}⚠${COLORS.RESET}`;
     }
+    stat = addStats(parseShortStat(cached ?? ""), parseShortStat(work ?? ""));
+  }
 
-    let insertions = stat.insertions;
-    for (const path of untracked) {
-        insertions += countLines(join(cwd, path), readFile);
-    }
+  let insertions = stat.insertions;
+  for (const path of untracked) {
+    insertions += countLines(join(cwd, path), readFile);
+  }
 
-    return formatChanges({
-        files: stat.files + untracked.length,
-        insertions,
-        deletions: stat.deletions,
-    });
+  return formatChanges({
+    files: stat.files + untracked.length,
+    insertions,
+    deletions: stat.deletions,
+  });
 }
 
 // #endregion 核心逻辑 --------------------------------
@@ -233,25 +233,25 @@ export function renderFromRaw(raw, git = runGit, readFile = readFileSync) {
  * 主函数：读 stdin -> 渲染着色 Git 变更 -> 输出
  */
 function main() {
-    // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
-    if (process.stdin.isTTY) {
-        process.stdout.write(
-            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
-        );
-        return;
-    }
-    let raw;
-    try {
-        raw = readFileSync(0, "utf8");
-    } catch {
-        // stdin 读取失败（管道断开等）按无输出处理
-        raw = "";
-    }
-    process.stdout.write(renderFromRaw(raw));
+  // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
+  if (process.stdin.isTTY) {
+    process.stdout.write(
+      "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
+    );
+    return;
+  }
+  let raw;
+  try {
+    raw = readFileSync(0, "utf8");
+  } catch {
+    // stdin 读取失败（管道断开等）按无输出处理
+    raw = "";
+  }
+  process.stdout.write(renderFromRaw(raw));
 }
 
 if (isMainModule(import.meta.url)) {
-    main();
+  main();
 }
 
 // #endregion CLI 壳 --------------------------------

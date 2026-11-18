@@ -1,9 +1,8 @@
-# CodingPlan Usage Query
-
 <div align="center">
 
-<img src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?logo=nodedotjs&logoColor=white" alt="Node.js 22.13+ required">
-<img src="https://img.shields.io/github/license/minimote/coding-plan-usage-query?color=blue&label=%C2%A9%20License" alt="License">
+# Coding Plan Usage Query
+
+<a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?logo=nodedotjs&logoColor=white" alt="Node.js 22.13+ required"></a> <a href="LICENSE"><img src="https://img.shields.io/github/license/minimote/coding-plan-usage-query?color=blue&label=%C2%A9%20License" alt="License"></a>
 
 </div>
 
@@ -17,7 +16,7 @@
 
 <p>
 
-> 查询各平台 Coding Plan 的套餐用量和重置倒计时，推荐搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 的自定义命令放在 Claude Code 状态栏查看。
+> 查询各平台 Coding Plan 的套餐用量和重置倒计时，可搭配 [ccstatusline](https://github.com/sirmalloc/ccstatusline) / [ccstatusline-zh](https://github.com/huangguang1999/ccstatusline-zh) 的自定义命令放在 Claude Code 状态栏查看，自动识别 [CC Switch](https://github.com/farion1231/cc-switch) 的当前供应商，自适应终端宽度。
 
 ## 支持的套餐
 
@@ -70,11 +69,11 @@ coding-plan-usage-query/
 │   │   ├── get-actual-provider-name.mjs   # 获取实际供应商名称
 │   │   └── preview.mjs                    # 生成模拟用量预览输出
 │   └── utils/
-│       ├── utils-cc-switch.mjs            # CC-Switch 工具
+│       ├── utils-cc-switch.mjs            # CC Switch 工具
 │       ├── utils-login.mjs                # 登录公共逻辑（Playwright、profile、写回 config）
 │       └── utils-query-usage.mjs          # 共享工具函数
 ├── test/                                  # 单元测试（node --test）
-└── tmp/                                   # 查询结果缓存与登录 profile（自动生成，已 gitignore）
+└── tmp/                                   # 查询结果缓存、无订阅状态与登录 profile（自动生成，已 gitignore）
 ```
 
 各查询脚本为「导出函数 + CLI 壳」双入口：既可直接 `node` 运行，也被 `smart`/`all` 以进程内函数调用，避免子进程启动开销。
@@ -144,13 +143,13 @@ node src/tools/preview.mjs
 
 查询脚本支持以下参数：
 
-|             参数              | 缩写 | 说明                                                                                                               |
-| :---------------------------: | :--: | ------------------------------------------------------------------------------------------------------------------ |
-|          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）                                                       |
-|           `--type`            | `-t` | 火山方舟套餐类型：`coding`（`c`）/ `agent`（`a`），未传时用账号 `type` 配置，再回退 `coding`（all/smart 脚本忽略） |
-|         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                                                                      |
-| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时隐藏该条查询（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                     |
-|  `--hide-on-no-active-plan`   |  -   | 无活跃套餐时隐藏该条查询（`true`/`false`，默认 `false`，仅 `all` 脚本生效）                                        |
+|             参数              | 缩写 | 说明                                                                                                                                                                                                   |
+| :---------------------------: | :--: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|          `--display`          | `-d` | 显示模式：`auto`（默认，`a`）/ `long`（`l`）/ `short`（`s`）                                                                                                                                           |
+|           `--type`            | `-t` | 火山方舟套餐类型：`coding`（`c`）/ `agent`（`a`），未传时用账号 `type` 配置，再回退 `coding`（all/smart 脚本忽略）                                                                                     |
+|         `--position`          | `-p` | 账号位置（从 0 开始，默认 0）                                                                                                                                                                          |
+| `--hide-on-monthly-exhausted` |  -   | 月额度耗尽时隐藏该条查询（`true`/`false`，默认 `false`，smart 脚本忽略该参数）                                                                                                                         |
+|  `--hide-on-no-active-plan`   |  -   | 无活跃套餐时隐藏该条查询（`true`/`false`，默认 `false`）：为 `true` 时最近确认过无订阅的账号遇瞬时故障也会隐藏，`all` 脚本还会过滤「无活跃套餐」错误行；`smart` 脚本忽略该参数，内部固定按 `true` 处理 |
 
 > 登录脚本（`login-qwen`）仅支持 `--position`/`-p` 参数。`position` 取 0~N（N 为当前账号数）：`< N` 更新已有账号，`= N` 新建第 N+1 个账号；越界时会提示重新输入，开浏览器前会要求确认。
 
@@ -162,24 +161,24 @@ node src/tools/preview.mjs
 
 ```json
 {
-    "ark": [
-        {
-            "shortLabel": "Coding",
-            "longLabel": "火山Coding",
-            "apiKey": "xxx",
-            "type": "coding",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        },
-        {
-            "shortLabel": "Agent",
-            "longLabel": "火山Agent",
-            "apiKey": "xxx",
-            "type": "agent",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        }
-    ]
+  "ark": [
+    {
+      "shortLabel": "Coding",
+      "longLabel": "火山Coding",
+      "apiKey": "xxx",
+      "type": "coding",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    },
+    {
+      "shortLabel": "Agent",
+      "longLabel": "火山Agent",
+      "apiKey": "xxx",
+      "type": "agent",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    }
+  ]
 }
 ```
 
@@ -189,7 +188,7 @@ node src/tools/preview.mjs
 | `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（火山Coding/Coding、火山Agent/Agent） |
 |       `accessKeyId`        |  是  | 火山引擎 AccessKey ID                                          |
 |     `secretAccessKey`      |  是  | 火山引擎 SecretAccessKey                                       |
-|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号               |
+|          `apiKey`          |  否  | CC Switch 里填的 API Key，smart 脚本据此匹配账号               |
 
 在火山引擎控制台 <https://console.volcengine.com/iam/keymanage> 创建 AccessKey（子账户需具有 `AccessKeySelfManageAccess` 和 `ArkReadOnlyAccess` 权限）。
 
@@ -197,13 +196,13 @@ node src/tools/preview.mjs
 
 ```json
 {
-    "commandcode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "CommandCode",
-            "longLabel": "CommandCode"
-        }
-    ]
+  "commandcode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "CommandCode",
+      "longLabel": "CommandCode"
+    }
+  ]
 }
 ```
 
@@ -216,14 +215,14 @@ node src/tools/preview.mjs
 
 ```json
 {
-    "ollama": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Ollama",
-            "longLabel": "Ollama",
-            "cookie": "xxx"
-        }
-    ]
+  "ollama": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Ollama",
+      "longLabel": "Ollama",
+      "cookie": "xxx"
+    }
+  ]
 }
 ```
 
@@ -231,7 +230,7 @@ node src/tools/preview.mjs
 | :------------------------: | :--: | :--------------------------------------------------------- |
 | `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（Ollama/Ollama）                  |
 |          `cookie`          |  是  | `__Secure-session` cookie 的值，从浏览器 DevTools 手动复制 |
-|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号           |
+|          `apiKey`          |  否  | CC Switch 里填的 API Key，smart 脚本据此匹配账号           |
 
 > Ollama 登录受 Cloudflare 人机验证保护，Playwright 启动的浏览器会被判定为自动化而无法通过验证，故未提供登录脚本。请登录 <https://ollama.com> 后从浏览器 DevTools -> Application -> Cookies 复制 `__Secure-session` 的值填入配置。
 
@@ -239,33 +238,33 @@ node src/tools/preview.mjs
 
 ```json
 {
-    "opencode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Go",
-            "longLabel": "OpenCode Go"
-        }
-    ]
+  "opencode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Go",
+      "longLabel": "OpenCode Go"
+    }
+  ]
 }
 ```
 
 |            字段            | 必填 | 说明                                             |
 | :------------------------: | :--: | :----------------------------------------------- |
 | `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（OpenCode Go/Go）       |
-|          `apiKey`          |  是  | OpenCode Go 的 API Key，CC-Switch 里填的同一个值 |
+|          `apiKey`          |  是  | OpenCode Go 的 API Key，CC Switch 里填的同一个值 |
 
 ### 阿里云千问 Token Plan
 
 ```json
 {
-    "qwen": [
-        {
-            "shortLabel": "千问",
-            "longLabel": "千问",
-            "apiKey": "xxx",
-            "cookie": "xxx"
-        }
-    ]
+  "qwen": [
+    {
+      "shortLabel": "千问",
+      "longLabel": "千问",
+      "apiKey": "xxx",
+      "cookie": "xxx"
+    }
+  ]
 }
 ```
 
@@ -273,7 +272,7 @@ node src/tools/preview.mjs
 | :------------------------: | :--: | ----------------------------------------------------- |
 | `longLabel` / `shortLabel` |  否  | 显示标签，不填使用默认值（千问/千问）                 |
 |          `cookie`          |  是  | 千问控制台登录 cookie，运行 `login-qwen.cmd` 自动填充 |
-|          `apiKey`          |  否  | CC-Switch 里填的 API Key，smart 脚本据此匹配账号      |
+|          `apiKey`          |  否  | CC Switch 里填的 API Key，smart 脚本据此匹配账号      |
 
 ## 自动匹配账号
 
@@ -288,8 +287,9 @@ node src/tools/preview.mjs
 
 - 检测到使用免费模型或匹配不到账号时，显示全部账号用量
 - 聚合模式下没有唯一供应商，直接显示 `config.json` 中全部账号的用量
+- 账号成功返回过一次「无活跃套餐」后，24 小时内即使查询遇到瞬时故障也按无订阅隐藏，重新查到用量即自动清除（`tmp/no-active-state.json`）
 - 查询结果缓存 5 秒，错误结果缓存 30 秒（`tmp/cache-usage.json`），减少高频刷新时的 API 请求
-- 手动运行子脚本时不使用缓存
+- 手动运行子脚本时不使用结果缓存（5 秒 / 30 秒），但无订阅状态（`tmp/no-active-state.json`）仍会读写，可能影响后续 24 小时的隐藏判定
 
 ## 搭配 ccstatusline / ccstatusline-zh 使用
 
@@ -306,6 +306,6 @@ node F:/xxx/query-usage-smart.mjs
 
 ## 相关项目
 
-- **CC Launcher**（[Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)）：使用指定的 CC-Switch 供应商启动 Claude Code，可同时运行多个不同供应商的 Claude Code 实例，不影响 CC-Switch 的全局激活状态。
+- **CC Launcher**（[Gitee](https://gitee.com/minimote/cc-launcher) | [GitHub](https://github.com/minimote/cc-launcher)）：使用指定的 CC Switch 供应商启动 Claude Code，可同时运行多个不同供应商的 Claude Code 实例，不影响 CC Switch 的全局激活状态。
 
 ## [MIT License](LICENSE)

@@ -22,16 +22,16 @@ import { COLORS, isMainModule } from "../utils/utils-query-usage.mjs";
  * @returns {string} ANSI 颜色转义序列
  */
 export function colorForTokens(total) {
-    if (total < 128_000) {
-        return COLORS.GREEN;
-    }
-    if (total < 256_000) {
-        return COLORS.YELLOW;
-    }
-    if (total < 512_000) {
-        return COLORS.ORANGE;
-    }
-    return COLORS.RED;
+  if (total < 128_000) {
+    return COLORS.GREEN;
+  }
+  if (total < 256_000) {
+    return COLORS.YELLOW;
+  }
+  if (total < 512_000) {
+    return COLORS.ORANGE;
+  }
+  return COLORS.RED;
 }
 
 /**
@@ -41,7 +41,7 @@ export function colorForTokens(total) {
  * @returns {string} >=1000 转 k 单位（四舍五入到整数），否则原样输出
  */
 export function formatTokens(total) {
-    return total >= 1000 ? `${Math.round(total / 1000)}k` : String(total);
+  return total >= 1000 ? `${Math.round(total / 1000)}k` : String(total);
 }
 
 /**
@@ -53,42 +53,42 @@ export function formatTokens(total) {
  * @returns {string} 着色后的显示串
  */
 export function renderFromRaw(raw) {
-    try {
-        const data = JSON.parse(raw);
-        const cw = data?.context_window;
+  try {
+    const data = JSON.parse(raw);
+    const cw = data?.context_window;
 
-        // 从 JSON 取总 token 数（输入 + 输出）
-        const total =
-            (+cw?.total_input_tokens || 0) + (+cw?.total_output_tokens || 0);
+    // 从 JSON 取总 token 数（输入 + 输出）
+    const total =
+      (+cw?.total_input_tokens || 0) + (+cw?.total_output_tokens || 0);
 
-        return `${colorForTokens(total)}${formatTokens(total)}${COLORS.RESET}`;
-    } catch {
-        // 出现异常输出问号(亮白色)
-        return `${COLORS.WHITE}?${COLORS.RESET}`;
-    }
+    return `${colorForTokens(total)}${formatTokens(total)}${COLORS.RESET}`;
+  } catch {
+    // 出现异常输出问号(亮白色)
+    return `${COLORS.WHITE}?${COLORS.RESET}`;
+  }
 }
 
 /**
  * 主函数：读 stdin -> 渲染着色 token 数 -> 输出
  */
 function main() {
-    // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
-    if (process.stdin.isTTY) {
-        process.stdout.write(
-            "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
-        );
-        return;
-    }
-    let raw;
-    try {
-        raw = readFileSync(0, "utf8");
-    } catch {
-        // stdin 读取失败（管道断开等）按异常处理
-        raw = "";
-    }
-    process.stdout.write(renderFromRaw(raw));
+  // 终端直接运行时 stdin 为 TTY，readFileSync(0) 会阻塞，给出提示
+  if (process.stdin.isTTY) {
+    process.stdout.write(
+      "请在 ccstatusline / ccstatusline-zh 中作为自定义命令调用",
+    );
+    return;
+  }
+  let raw;
+  try {
+    raw = readFileSync(0, "utf8");
+  } catch {
+    // stdin 读取失败（管道断开等）按异常处理
+    raw = "";
+  }
+  process.stdout.write(renderFromRaw(raw));
 }
 
 if (isMainModule(import.meta.url)) {
-    main();
+  main();
 }

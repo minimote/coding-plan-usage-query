@@ -1,51 +1,51 @@
 {
-    "$schema": "./config.schema.json",
-    "ark": [
-        {
-            "shortLabel": "Coding",
-            "longLabel": "火山Coding",
-            "apiKey": "xxx",
-            "type": "coding",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        },
-        {
-            "shortLabel": "Agent",
-            "longLabel": "火山Agent",
-            "apiKey": "xxx",
-            "type": "agent",
-            "accessKeyId": "xxx",
-            "secretAccessKey": "xxx"
-        }
-    ],
-    "commandcode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "CommandCode",
-            "longLabel": "CommandCode"
-        }
-    ],
-    "ollama": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Ollama",
-            "longLabel": "Ollama",
-            "cookie": "xxx"
-        }
-    ],
-    "opencode": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "Go",
-            "longLabel": "OpenCode Go"
-        }
-    ],
-    "qwen": [
-        {
-            "apiKey": "xxx",
-            "shortLabel": "千问",
-            "longLabel": "千问",
-            "cookie": "xxx"
-        }
-    ]
+  "$schema": "./config.schema.json",
+  "ark": [
+    {
+      "shortLabel": "Coding",
+      "longLabel": "火山Coding",
+      "apiKey": "xxx",
+      "type": "coding",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    },
+    {
+      "shortLabel": "Agent",
+      "longLabel": "火山Agent",
+      "apiKey": "xxx",
+      "type": "agent",
+      "accessKeyId": "xxx",
+      "secretAccessKey": "xxx"
+    }
+  ],
+  "commandcode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "CommandCode",
+      "longLabel": "CommandCode"
+    }
+  ],
+  "ollama": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Ollama",
+      "longLabel": "Ollama",
+      "cookie": "xxx"
+    }
+  ],
+  "opencode": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "Go",
+      "longLabel": "OpenCode Go"
+    }
+  ],
+  "qwen": [
+    {
+      "apiKey": "xxx",
+      "shortLabel": "千问",
+      "longLabel": "千问",
+      "cookie": "xxx"
+    }
+  ]
 }

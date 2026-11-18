@@ -1,5 +1,23 @@
 # 更新日志
 
+## v2.13.0-2026.11.18
+
+> 53 个文件变更，6431 行插入，5544 行删除
+
+### 新增
+
+- **新增无订阅状态记忆**（`utils-query-usage.mjs` 新增 `NO_ACTIVE_STATE_TTL_MS` / `hasRecentNoActiveState` / `clearNoActiveState`）：账号成功返回过一次「无活跃套餐」后写入 `tmp/no-active-state.json`，24 小时内遇瞬时故障也按无订阅隐藏该行，避免未订阅账号的错误在故障期冒出来；重新查到用量即清除。`smart` 匹配路径固定启用 `hideOnNoActivePlan`（抽出 `buildMatchedQueryOptions`），`all` 脚本无订阅错误行仍按参数过滤
+- 新增测试 `no-active-state.test.mjs`（无订阅状态写入 / 瞬时故障沿用 / 查到用量清除 / 过期）、`state-file-concurrency.test.mjs`（8 进程并发读写状态与缓存文件）、`no-active-env.mjs`（把状态文件重定向到临时目录，避免测试污染真实 `tmp/no-active-state.json`）
+
+### 优化
+
+- **统一换行符与缩进**：新增 `.gitattributes` 与 `.editorconfig`，并修正源码与测试里缩进不齐的代码
+- **缓存键改用凭据哈希**（新增 `hashCredential`，SHA-256 取前 16 位）：由账号位置 `key:position` 改为 `key:hash`，账号增删 / 重排不再错位，换凭据自动 miss；凭据不落明文，对象凭据按键排序后哈希。ark 仍把套餐 type 编进键里区分 coding / agent
+- **缓存与状态文件跨进程加锁 + 原子写**（新增 `withFileLock` / `writeFileAtomic`）：并发读-改-写不再互相覆盖；500ms 内抢不到锁则跳过本次写入（状态与缓存只是优化），进程崩溃留下的陈旧锁 5s 后清理；登录脚本写回 config 一并改用原子写
+- **`isTransientError` 改 allow-list**：只认超时 / Abort、HTTP 5xx / 429 与 `fetch failed`，响应结构异常、页面解析失败、代码 bug 等永久错误不再被误判为瞬时故障而写进负缓存或被无订阅状态隐藏
+- 写缓存与无订阅状态时顺带清理过期条目，含时钟回拨产生的未来时间戳，换凭据后的旧键不再永久残留
+- 缓存测试改用 `CC_USAGE_CACHE_PATH` 重定向到临时目录，不再清理真实生产缓存
+
 ## v2.12.0-2026.11.02
 
 > 18 个文件变更，1371 行插入，284 行删除
@@ -12,8 +30,8 @@
 ### 优化
 
 - **CommandCode 月额度改按已花金额反推**（`query-usage-commandcode.mjs`）：新增并行请求 `/alpha/usage/summary` 取本周期 `totalCost`，月用量 = `totalCost / (totalCost + monthlyCredits)`，删除 `PLAN_MONTHLY_CREDITS` planId 查表——上游新增 / 改名套餐时月窗口不再失效
-    - `freeCredits` / `purchasedCredits` 不计入分母（归属未验证，避免重复计数）
-    - summary 请求失败或 `totalCost` 无效时月窗口降级为 `月:--`，行尾附 `⚠ 月已花金额获取失败` / `⚠ 月剩余额度获取失败`，5h / 周不受影响
+  - `freeCredits` / `purchasedCredits` 不计入分母（归属未验证，避免重复计数）
+  - summary 请求失败或 `totalCost` 无效时月窗口降级为 `月:--`，行尾附 `⚠ 月已花金额获取失败` / `⚠ 月剩余额度获取失败`，5h / 周不受影响
 - **按量付费账号**（`windowLimits.limited === false`）：不写 5h / 周键而非置 null，不再渲染出 `五:-- 周:--`；`limited` 缺失时仍照常展示，避免改字段名后窗口静默消失
 - **`ensureAnyWindow` 不再认 note**：三窗口全空即报「响应结构异常」，降级说明只能解释单个窗口缺失，不能证明响应结构正常
 - **Git 改动着色**：去掉文件数与增删之间的空格，`Δ2 +48-289` → `Δ2+48-289`
@@ -23,6 +41,8 @@
 - 清理未使用的导入与变量（`query-usage-ark` 的 `isTransientError`、`utils-login` 的 `action`），空 `catch` 补注释
 
 ## v2.11.0-2026.10.25
+
+> 18 个文件变更，1130 行插入，52 行删除
 
 ### 新增
 
@@ -43,6 +63,8 @@
 
 ## v2.10.0-2026.10.03
 
+> 9 个文件变更，186 行插入，16 行删除
+
 ### 新增
 
 - **`long` 档进度条**（`utils-query-usage.mjs` 新增 `bar`）：`--display long` 时在每个窗口的百分比前增加 6 格进度条（精度 1/48，约 2%），与百分比数字同色，背景为新增的 `COLORS.DARK_GRAY` 轨道；端点保护与 `formatPct` 对齐，只有真正 0% 全空、100% 全满，其余钳在 1–47 档。`short` 档不带条，`auto` 档把条计入测宽，放不下时回退 `short`
@@ -55,33 +77,37 @@
 
 ## v2.9.0-2026.10.02
 
+> 26 个文件变更，1489 行插入，1029 行删除
+
 ### 新增
 
 - **查询壳**（`utils-query-usage.mjs` 新增 `runQueryUsage` / `runQueryCli`）：ark / commandcode / ollama / opencode-go / qwen 五脚本逐字相同的壳流程（读配置 → 定位账号 → 解析标签 → 校验凭据 → 缓存 → 渲染 → 负缓存）统一收敛，各脚本只保留差异钩子
-    - ark 缓存键与标签依赖套餐 type（定位到账号后才能定），故保留 `resolveType` / `labels` / `cacheKey` 钩子
-    - 配套共享工具：`fetchWithTimeout`、`readJsonResponse`（吞 JSON 解析错但透传超时）、`httpStatusError`、`toResetSec`（缺失 / 0 / 非法归 null 而非当成 1970）、`ensureAnyWindow`（三窗口全空且无 note 报结构异常）、`isTransientError`、`BROWSER_UA`、`INVALID_API_KEY`
+  - ark 缓存键与标签依赖套餐 type（定位到账号后才能定），故保留 `resolveType` / `labels` / `cacheKey` 钩子
+  - 配套共享工具：`fetchWithTimeout`、`readJsonResponse`（吞 JSON 解析错但透传超时）、`httpStatusError`、`toResetSec`（缺失 / 0 / 非法归 null 而非当成 1970）、`ensureAnyWindow`（三窗口全空且无 note 报结构异常）、`isTransientError`、`BROWSER_UA`、`INVALID_API_KEY`
 - `renderWindows` 支持 `usage.note`：供应商在关键数据缺一角但不值得整行失败时附中文说明，渲染为行尾独立的 `⚠ <说明>` 段（AUTO 档宽度估算已计入，窄终端不溢出）
 
 ### 优化
 
 - **OpenCode Go 改用内部 API**（`query-usage-opencode-go.mjs`）：由抓 `/workspace/<id>/go` 页面 HTML 解析（cookie + workspaceID）改为请求 `/zen/go/v1/usage`（`apiKey` Bearer 鉴权）
-    - 错误判别改基于响应体 `error.type`：`EntitlementError` → 无 Go 订阅，`AuthError` / 401 / 3xx 跳登录页 → apiKey 无效，避免 403 限流 / WAF 被误判成无活跃套餐遭 `hideOnNoActivePlan` 静默吞掉
-    - `redirect: manual` 不跟随重定向，以便区分鉴权失败
-    - 删除 `login-opencode.mjs` / `login-opencode.cmd` / `login:opencode` script；配置 `opencode` 去掉 `authCookie` / `workspaceID`、`apiKey` 改必填，README / config.schema / config.example 同步
+  - 错误判别改基于响应体 `error.type`：`EntitlementError` → 无 Go 订阅，`AuthError` / 401 / 3xx 跳登录页 → apiKey 无效，避免 403 限流 / WAF 被误判成无活跃套餐遭 `hideOnNoActivePlan` 静默吞掉
+  - `redirect: manual` 不跟随重定向，以便区分鉴权失败
+  - 删除 `login-opencode.mjs` / `login-opencode.cmd` / `login:opencode` script；配置 `opencode` 去掉 `authCookie` / `workspaceID`、`apiKey` 改必填，README / config.schema / config.example 同步
 - **负缓存改造**（`utils-query-usage.mjs`）：
-    - 缓存键由渲染好的整行 `output` 改存错误消息 `error`，命中时用本次 display 与账号标签重新渲染（原方案在 30s 窗口内改显示档位 / 标签名不生效）
-    - 只对瞬时故障（`isTransientError`：超时 / 5xx 等可能自愈的错误）写负缓存；无活跃套餐 / apiKey 无效 / cookie 失效需用户改配置或重新登录才解，不写，避免修好后仍被旧错误挡满 TTL
-    - `readCache` 扣倒计时只对窗口对象扣，非窗口键（note）原样保留
+  - 缓存键由渲染好的整行 `output` 改存错误消息 `error`，命中时用本次 display 与账号标签重新渲染（原方案在 30s 窗口内改显示档位 / 标签名不生效）
+  - 只对瞬时故障（`isTransientError`：超时 / 5xx 等可能自愈的错误）写负缓存；无活跃套餐 / apiKey 无效 / cookie 失效需用户改配置或重新登录才解，不写，避免修好后仍被旧错误挡满 TTL
+  - `readCache` 扣倒计时只对窗口对象扣，非窗口键（note）原样保留
 - **CommandCode**（`query-usage-commandcode.mjs`）：
-    - `planId` 未收录（上游新增 / 改名套餐）时不再整行失败，降级只显示月窗口并在行尾附「月剩余 + 当前套餐名」说明（5h / 周照常渲染）
-    - 月剩余大于套餐上限时按数据不可信显示 `月:--`，不再算出负百分比
-    - 401 / 403 改判「apiKey 无效」（实测套餐过期是 200 + 字段全空，403 多为 key 权限 / 限流），避免被 `hideOnNoActivePlan` 静默吞掉整行
-    - `planId` 撞 `Object.prototype` 键名（`toString` 等）时不再取到函数，正确识别为未收录；`subscriptions.data` 为 null 判无活跃套餐而非结构异常
+  - `planId` 未收录（上游新增 / 改名套餐）时不再整行失败，降级只显示月窗口并在行尾附「月剩余 + 当前套餐名」说明（5h / 周照常渲染）
+  - 月剩余大于套餐上限时按数据不可信显示 `月:--`，不再算出负百分比
+  - 401 / 403 改判「apiKey 无效」（实测套餐过期是 200 + 字段全空，403 多为 key 权限 / 限流），避免被 `hideOnNoActivePlan` 静默吞掉整行
+  - `planId` 撞 `Object.prototype` 键名（`toString` 等）时不再取到函数，正确识别为未收录；`subscriptions.data` 为 null 判无活跃套餐而非结构异常
 - **单元测试扩充**：新增公共 `test/fetch-stub.mjs`（`makeResp` / `makeJsonResp` / `withFetch` / `withFetchByUrl` / `withFetchCapture`）替换各测试内联 stub
-    - ark / commandcode / ollama / opencode-go 新增 `queryUsage` 请求层集成测试，stub `globalThis.fetch` 覆盖正常响应、401 / 403 → key 无效、500 → HTTP 错误、三窗口全空 → 结构异常、EntitlementError / AuthError 优先级、3xx 跳登录、UA 携带、负缓存按本次参数重渲染等分支
-    - `utils-query-usage` 新增 `isTransientError` / `toResetSec` / `ensureAnyWindow` / `renderWindows(note)` 用例；`query-usage-qwen` 重置时间为 0 归 null 用例修正
+  - ark / commandcode / ollama / opencode-go 新增 `queryUsage` 请求层集成测试，stub `globalThis.fetch` 覆盖正常响应、401 / 403 → key 无效、500 → HTTP 错误、三窗口全空 → 结构异常、EntitlementError / AuthError 优先级、3xx 跳登录、UA 携带、负缓存按本次参数重渲染等分支
+  - `utils-query-usage` 新增 `isTransientError` / `toResetSec` / `ensureAnyWindow` / `renderWindows(note)` 用例；`query-usage-qwen` 重置时间为 0 归 null 用例修正
 
 ## v2.8.0-2026.09.01
+
+> 13 个文件变更，656 行插入，23 行删除
 
 ### 新增
 
@@ -93,6 +119,8 @@
 
 ## v2.7.1-2026.08.25
 
+> 6 个文件变更，108 行插入，6 行删除
+
 ### 修复
 
 - 千问套餐过期 / 未订阅时误报「响应结构异常」：此时接口外层返回 SUCCESS 但 `data.DataV2.data` 内层只有元信息、数据体缺失，原实现直接判定为结构异常报错；现识别为无活跃套餐并抛 `NO_ACTIVE_PLAN`，`all` / `smart` 脚本能正确隐藏该行。数据体存在但用量字段（`per5HourPercentage` / `per1WeekPercentage`）全部缺失时仍报「响应结构异常」，不受此判定影响——接口字段改名 / 更新仍会被捕获，不会被误当无活跃套餐静默掩盖
@@ -103,11 +131,13 @@
 
 ## v2.7.0-2026.08.06
 
+> 35 个文件变更，1834 行插入，367 行删除
+
 ### 新增
 
-- 实际供应商名称工具 `src/tools/get-actual-provider-name.mjs`：作为 ccstatusline / ccstatusline-zh 自定义命令，输出当前实际使用的 CC-Switch 供应商名。获取不到套餐账号（如免费模型）或供应商名以 `free-` 开头时输出（已剥 `free-` 前缀）；匹配到套餐账号且名字无前缀时不输出（用量行前缀已含供应商信息）。`matchProviderAccount` 与 `getActualProviderName` 并发执行，前者失败（如 config 缺失）视为获取不到套餐，整体异常静默不输出
+- 实际供应商名称工具 `src/tools/get-actual-provider-name.mjs`：作为 ccstatusline / ccstatusline-zh 自定义命令，输出当前实际使用的 CC Switch 供应商名。获取不到套餐账号（如免费模型）或供应商名以 `free-` 开头时输出（已剥 `free-` 前缀）；匹配到套餐账号且名字无前缀时不输出（用量行前缀已含供应商信息）。`matchProviderAccount` 与 `getActualProviderName` 并发执行，前者失败（如 config 缺失）视为获取不到套餐，整体异常静默不输出
 - cc-launcher 集成：`utils-cc-switch.mjs` 识别 cc-launcher 启动时注入的 `CC_SWITCH_PROVIDER_ID` 环境变量，直接反查数据库精确锁定实际启动的供应商，可区分 base_url 与 token 均相同的同 key 供应商；该 id 在数据库中查无此行或 db 读失败（短暂锁 / 损坏）时降级到全局激活供应商 `currentProviderClaude`，与「查无此行」一致——抛错也降级，避免 launcherId 侧瞬态故障直接失败。`getAPIKey` 与 `getActualProviderName` 共用新增的 `getCurrentProviderRow`，保证两条链路供应商判定一致
-- `matchProviderAccount`（`utils-query-usage.mjs`）：拿 CC-Switch 当前供应商的 API Key 在 config 中匹配账号，未传 config 时内部 `loadConfig`；apiKey 有效但匹配不到账号返回 null；config 读取或 `getAPIKey` 异常（CC-Switch 配置损坏 / db 不可读 / 供应商未配 key 等真实配置故障）直接抛出由调用方诊断——这些不是「匹配不到」，不应静默降级
+- `matchProviderAccount`（`utils-query-usage.mjs`）：拿 CC Switch 当前供应商的 API Key 在 config 中匹配账号，未传 config 时内部 `loadConfig`；apiKey 有效但匹配不到账号返回 null；config 读取或 `getAPIKey` 异常（CC Switch 配置损坏 / db 不可读 / 供应商未配 key 等真实配置故障）直接抛出由调用方诊断——这些不是「匹配不到」，不应静默降级
 - `escapeRegExp`（`utils-query-usage.mjs`）：转义正则特殊字符的工具函数，把任意字符串作为字面量拼进 RegExp，opencode-go 与 get-actual-model-name 共用
 - `friendlyError`（`utils-query-usage.mjs`）：把常见异常转为中文友好提示，只认客户端 `AbortSignal.timeout` 触发的超时（`DOMException` name=`TimeoutError`），不靠消息文本匹配，避免把上游错误消息中含 "timeout" 字样的业务错误误判为请求超时；其余原样透传不掩盖真实错误
 - `LIGHT_GRAY` 颜色常量（#B0B0B0，白与灰的平均）：倒计时着色专用
@@ -121,7 +151,7 @@
 - 倒计时渲染统一处理缺失 / 负数：`renderWindows` 中 null / NaN / Infinity / 负数 / 非数字秒数一律显示 `↻ --`，负数表示「重置时间已过或不可用」不再被钳成 0 分钟误导；`toCountdown` 增加脏数据防御，非有限数字归零；`readCache` 倒计时扣除时 null 保持 null、不再钳 0；ark / qwen / ollama / opencode-go 各查询脚本 `sec` 缺失改 null、负数原样透传，统一交给渲染层显示
 - 倒计时颜色由白（#E0E0E0）改为浅灰（#B0B0B0），与窗口标签区分又不至于抢过数据焦点
 - `writeCache`：缓存文件若被写成了数组（`typeof === "object"` 会漏过 null / 非对象校验，给数组设命名属性后 `JSON.stringify` 丢弃，条目静默不落地），一并重置为 `{}`，避免条目丢失
-- 缓存 / settings 路径支持环境变量重定向：`CC_USAGE_CACHE_PATH`（缓存文件）、`CC_SWITCH_SETTINGS_PATH`（CC-Switch settings.json）、`CC_CLAUDE_SETTINGS_PATH`（Claude settings.json），便于测试注入临时文件，不触碰真实 `~/.cc-switch` 与 `~/.claude`
+- 缓存 / settings 路径支持环境变量重定向：`CC_USAGE_CACHE_PATH`（缓存文件）、`CC_SWITCH_SETTINGS_PATH`（CC Switch settings.json）、`CC_CLAUDE_SETTINGS_PATH`（Claude settings.json），便于测试注入临时文件，不触碰真实 `~/.cc-switch` 与 `~/.claude`
 - `query-usage-ark.mjs` `uriEncode` 改按 UTF-8 字节序列逐字节百分号编码（原按 UTF-16 码元把整个非 ASCII 字符当数字编码，不符合 RFC 3986，中文等字符为非法编码）
 - `query-usage-ark.mjs` 账号 type 经 `normalizeType` 归一：配置写 `Agent` / `Coding` 等大小写形式不再被静默回退到 coding；type 同时用于错误标签选择与负缓存键（原 `effType` 仅用于负缓存键），声明提到 try 外，catch 写负缓存时按当前已解析的 type 落键
 - `query-usage-ollama.mjs` `parseUsageWindows` 重写：从窗口标题位置向后切片取该窗口第一个 `local-time` 的 `data-time` 与 `Resets in` 文本，不依赖块容器配平（真实页面标题在 `<span>` 内、外层块容器嵌套深，按 `<div>` 配平会取到内层布局 div 而漏掉 local-time），也不依赖全局出现顺序（避免窗口顺序变化干扰）；每窗口只定位标题一次、切片一次，对同一段连跑三个正则，避免重复全量扫描；移除 `htmlToText`。移除 cookie 过期登录关键词检测（HTTP 200 + 页面出现 login / sign in 等字样即判过期）——改由后续鉴权 / 解析逻辑判定，避免正常页面文本误判
@@ -140,6 +170,8 @@
 - `utils-login.mjs` `resolvePosition` 传入负数 position 被错误接受，现增加 `>= 0` 下界
 
 ## v2.6.0-2026.08.05
+
+> 15 个文件变更，598 行插入，38 行删除
 
 ### 新增
 
@@ -162,6 +194,8 @@
 - 自定义账号标签含 ❌ 前缀或「无活跃套餐」字样时不再被误判为错误行 / 被 `--hide-on-no-active-plan` 静默丢弃（原实现整行匹配，现只匹配数据段）
 
 ## v2.5.0-2026.07.30
+
+> 22 个文件变更，340 行插入，172 行删除
 
 ### 新增
 
@@ -193,6 +227,8 @@
 
 ## v2.4.0-2026.07.27
 
+> 25 个文件变更，1457 行插入，389 行删除
+
 ### 新增
 
 - Ollama Cloud 用量查询：新增 `src/query/query-usage-ollama.mjs`，请求 `ollama.com/settings` 解析 SSR HTML，提取 session（映射 rolling）/ weekly 两个窗口用量；重置时间优先取 `local-time` 元素的 `data-time` 精确时间戳，回退到 "Resets in X hours" 文本时长解析；cookie 失效（3xx 重定向或页面出现登录关键词）时明确提示从浏览器重新获取 `__Secure-session`。Ollama 登录受 Cloudflare 人机验证保护，Playwright 启动的浏览器会被判定为自动化而无法通过，故未提供登录脚本，cookie 需从真实浏览器手动复制
@@ -214,7 +250,7 @@
 - `query-usage-opencode-go.mjs`：文件头与函数注释中 `OpenCodeGo` 统一为 `OpenCode Go`
 - `preview.mjs` 假数据调整：按阅读顺序循环绿 / 黄 / 橙 / 红四档颜色，新增 Ollama 样本
 - `playwright-core` 升级 ^1.61.1 -> ^1.62.0
-- README / README_EN 大幅更新：新增 Ollama Cloud 章节与获取方式对照表、npm scripts 快捷运行说明、登录 `position` 取值与交互说明、配置字段表格重排、「CC Switch」统一为「CC-Switch」
+- README / README_EN 大幅更新：新增 Ollama Cloud 章节与获取方式对照表、npm scripts 快捷运行说明、登录 `position` 取值与交互说明、配置字段表格重排
 
 ### 修复
 
@@ -222,6 +258,8 @@
 - `login-qwen.mjs` 用户取消登录（`runLogin` 返回 null）后访问 `result.cookie` 空指针：改为 `result?.cookie`
 
 ## v2.3.0-2026.07.25
+
+> 35 个文件变更，1564 行插入，162 行删除
 
 ### 新增
 
@@ -245,7 +283,7 @@
 - `.gitignore` 新增忽略 `node_modules/`
 - README 更新：新增千问、登录脚本、预览工具说明与英文版链接
 - 千问非 200 响应读取响应体并附上错误详情（`errorMsg`/`message`），与火山方舟的 `callOpenApi` 错误处理对齐
-- `lookupProviderInDb`（`utils-cc-switch.mjs`）捕获 SQLite 异常并包装为「CC-Switch 数据库读取失败」友好提示，便于定位故障来源
+- `lookupProviderInDb`（`utils-cc-switch.mjs`）捕获 SQLite 异常并包装为「CC Switch 数据库读取失败」友好提示，便于定位故障来源
 - `openDb`（`utils-cc-switch.mjs`）支持 `CC_SWITCH_DB_PATH` 环境变量重定向 db 路径，供集成测试注入临时文件
 
 ### 修复
@@ -253,6 +291,8 @@
 - 配置类错误（config 读取失败 / 账号越界 / 缺凭据）不再写负缓存：仅对已进入网络查询阶段后的失败写负缓存，避免无意义的负缓存写入，以及配置在 TTL 内修复后短暂显示旧错误
 
 ## v2.2.0-2026.07.21
+
+> 15 个文件变更，1220 行插入，316 行删除
 
 ### 新增
 
@@ -274,6 +314,8 @@
 
 ## v2.1.0-2026.07.18
 
+> 11 个文件变更，176 行插入，90 行删除
+
 ### 新增
 
 - `--hide-on-monthly-exhausted` 参数：月度额度耗尽时隐藏该行输出（`true`/`false`，默认 `false`）；smart 脚本使用免费模型查询全部账号时自动启用，过滤已耗尽的账号
@@ -289,9 +331,11 @@
 
 ## v2.0.1-2026.07.13
 
+> 5 个文件变更，72 行插入，28 行删除
+
 ### 修复
 
-- 修复通过 CC Launcher / `claude --settings` 启动 Claude Code 时 `getAPIKey` 读取的是 CC-Switch 全局当前供应商、而非实际注入供应商的 API Key 的问题：改为优先从环境变量 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` 读取，遇到 `PROXY_MANAGED` 占位符则回退到数据库查询
+- 修复通过 CC Launcher / `claude --settings` 启动 Claude Code 时 `getAPIKey` 读取的是 CC Switch 全局当前供应商、而非实际注入供应商的 API Key 的问题：改为优先从环境变量 `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` 读取，遇到 `PROXY_MANAGED` 占位符则回退到数据库查询
 
 ### 优化
 
@@ -300,10 +344,12 @@
 
 ## v2.0.0-2026.07.11
 
+> 21 个文件变更，2028 行插入，999 行删除
+
 ### 新增
 
 - 多账号支持：配置文件改为数组，可同时配置多个账号，通过 `--position` 参数指定查询的账号
-- CC-Switch 集成：新增 `src/utils/utils-cc-switch.mjs`，读取当前供应商信息与 API Key
+- CC Switch 集成：新增 `src/utils/utils-cc-switch.mjs`，读取当前供应商信息与 API Key
 - 智能显示模式：`--display auto` 按终端宽度自动选择长版或短版输出
 - 自定义标签：每个账号可配置 `longLabel`/`shortLabel`，便于区分多个账号
 - JSON Schema 校验：新增 `config/config.schema.json`，编辑器可据此提供字段提示
@@ -314,8 +360,8 @@
 - ⚠️ 目录结构重构：脚本从根目录移至 `src/query/`、`src/tools/` 和 `src/utils/`，配置文件移至 `config/`
 - ⚠️ 配置文件格式变更：从单账号对象改为多账号数组，旧配置需迁移
 - ⚠️ 命令行参数改为命名式：统一使用 `--display`/`-d`、`--type`/`-t`、`--position`/`-p`，不再支持位置参数（如 `node query-usage-ark.mjs agent` 需改为 `--type agent`）
-- ⚠️ smart 脚本改用 CC-Switch：通过读取 `~/.cc-switch` 的 `settings.json` 和 SQLite 数据库匹配当前供应商，不再依赖 `ANTHROPIC_BASE_URL`
-- ⚠️ Node.js 版本要求提升至 22.13+：依赖 `node:sqlite` 内置模块读取 CC-Switch 数据库（22.13 起默认可用，无需加 `--experimental-sqlite` 标志）
+- ⚠️ smart 脚本改用 CC Switch：通过读取 `~/.cc-switch` 的 `settings.json` 和 SQLite 数据库匹配当前供应商，不再依赖 `ANTHROPIC_BASE_URL`
+- ⚠️ Node.js 版本要求提升至 22.13+：依赖 `node:sqlite` 内置模块读取 CC Switch 数据库（22.13 起默认可用，无需加 `--experimental-sqlite` 标志）
 - ⚠️ 脚本重命名：`query-usage-utils.mjs` -> `utils-query-usage.mjs`
 - 百分比按用量分档着色（0-59% 绿 / 60-79% 黄 / 80-99% 橙 / 100% 红）
 - 使用免费模型时改为显示全部账号用量（原为不显示）
@@ -326,11 +372,15 @@
 
 ## v1.1.1-2026.07.04
 
+> 2 个文件变更，18 行插入，2 行删除
+
 ### 优化
 
 - 优化 README 的描述与排版
 
 ## v1.1.0-2026.07.04
+
+> 15 个文件变更，1024 行插入，599 行删除
 
 ### 新增
 
@@ -346,6 +396,8 @@
 - `query-usage-smart.mjs` 在使用免费模型时，不显示套餐用量
 
 ## v1.0.0-2026.07.03
+
+> 10 个文件变更，698 行插入
 
 ### 新增
 

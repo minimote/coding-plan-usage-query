@@ -19,16 +19,16 @@
  */
 
 import {
-    KEYS,
-    NO_ACTIVE_PLAN,
-    BROWSER_UA,
-    DEFAULT_LABELS,
-    fetchWithTimeout,
-    httpStatusError,
-    isMainModule,
-    runQueryCli,
-    runQueryUsage,
-    toResetSec,
+  KEYS,
+  NO_ACTIVE_PLAN,
+  BROWSER_UA,
+  DEFAULT_LABELS,
+  fetchWithTimeout,
+  httpStatusError,
+  isMainModule,
+  runQueryCli,
+  runQueryUsage,
+  toResetSec,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -50,14 +50,14 @@ const SETTINGS_URL = "https://ollama.com/settings";
  * @returns {number} 秒数，无法识别时返回 0
  */
 export function parseDurationString(s) {
-    let sec = 0;
-    const multipliers = { day: 86400, hour: 3600, minute: 60, second: 1 };
-    const re = /(\d+)\s*(day|hour|minute|second)s?/gi;
-    let m;
-    while ((m = re.exec(s))) {
-        sec += parseInt(m[1], 10) * multipliers[m[2].toLowerCase()];
-    }
-    return sec;
+  let sec = 0;
+  const multipliers = { day: 86400, hour: 3600, minute: 60, second: 1 };
+  const re = /(\d+)\s*(day|hour|minute|second)s?/gi;
+  let m;
+  while ((m = re.exec(s))) {
+    sec += parseInt(m[1], 10) * multipliers[m[2].toLowerCase()];
+  }
+  return sec;
 }
 
 /**
@@ -80,48 +80,48 @@ export function parseDurationString(s) {
  * }}
  */
 export function parseUsageWindows(html, now = Date.now()) {
-    // 从标题位置向后取该窗口的第一个匹配：local-time 的 data-time 与 "Resets in"
-    // 都在标题所在块内、且是该标题后第一个，故无需块容器配平即可正确归属。
-    // 标题定位用大小写不敏感搜索，与下方正则的 /i 一致，避免标题大小写变体时整窗丢数据。
-    // 每窗口只定位标题一次、切片一次，对同一段连跑三个正则，避免重复全量扫描
-    const parseWindow = (title) => {
-        const idx = html.search(new RegExp(title, "i"));
-        if (idx < 0) {
-            return null;
-        }
-        const rest = html.slice(idx);
-        const pct = rest.match(/([\d.]+)%\s*used/i)?.[1];
-        if (pct === undefined) {
-            return null;
-        }
-        const timeMatch = rest.match(
-            /class="[^"]*local-time[^"]*"\s+data-time="([^"]+)"/i,
-        );
-        const resetMs = timeMatch ? Date.parse(timeMatch[1]) : null;
-        const reset = rest.match(/Resets in\s*([^\n<]+)/i)?.[1];
-        return { pct, reset, resetMs };
-    };
+  // 从标题位置向后取该窗口的第一个匹配：local-time 的 data-time 与 "Resets in"
+  // 都在标题所在块内、且是该标题后第一个，故无需块容器配平即可正确归属。
+  // 标题定位用大小写不敏感搜索，与下方正则的 /i 一致，避免标题大小写变体时整窗丢数据。
+  // 每窗口只定位标题一次、切片一次，对同一段连跑三个正则，避免重复全量扫描
+  const parseWindow = (title) => {
+    const idx = html.search(new RegExp(title, "i"));
+    if (idx < 0) {
+      return null;
+    }
+    const rest = html.slice(idx);
+    const pct = rest.match(/([\d.]+)%\s*used/i)?.[1];
+    if (pct === undefined) {
+      return null;
+    }
+    const timeMatch = rest.match(
+      /class="[^"]*local-time[^"]*"\s+data-time="([^"]+)"/i,
+    );
+    const resetMs = timeMatch ? Date.parse(timeMatch[1]) : null;
+    const reset = rest.match(/Resets in\s*([^\n<]+)/i)?.[1];
+    return { pct, reset, resetMs };
+  };
 
-    const toWindow = (w) => {
-        if (w === null) {
-            return null;
-        }
-        // 优先 data-time 精确时间戳，回退到文本时长解析；两者皆无效则无倒计时（null → ↻ --）
-        // 负数（重置已过）原样透传，由 renderWindows 统一显示 ↻ --，不再钳成 0 分钟
-        let sec = toResetSec(w.resetMs, now);
-        if (sec === null && w.reset !== undefined) {
-            // parseDurationString 对无法识别文本返回 0，视为无效（0 秒倒计时也无意义），
-            // 归 null → ↻ --，与「两者皆无效则无倒计时」契约一致
-            const parsed = parseDurationString(w.reset);
-            sec = parsed > 0 ? parsed : null;
-        }
-        return { pct: parseFloat(w.pct), sec };
-    };
+  const toWindow = (w) => {
+    if (w === null) {
+      return null;
+    }
+    // 优先 data-time 精确时间戳，回退到文本时长解析；两者皆无效则无倒计时（null → ↻ --）
+    // 负数（重置已过）原样透传，由 renderWindows 统一显示 ↻ --，不再钳制为 0 分钟
+    let sec = toResetSec(w.resetMs, now);
+    if (sec === null && w.reset !== undefined) {
+      // parseDurationString 对无法识别文本返回 0，视为无效（0 秒倒计时也无意义），
+      // 归 null → ↻ --，与「两者皆无效则无倒计时」契约一致
+      const parsed = parseDurationString(w.reset);
+      sec = parsed > 0 ? parsed : null;
+    }
+    return { pct: parseFloat(w.pct), sec };
+  };
 
-    return {
-        rolling: toWindow(parseWindow("Session usage")),
-        weekly: toWindow(parseWindow("Weekly usage")),
-    };
+  return {
+    rolling: toWindow(parseWindow("Session usage")),
+    weekly: toWindow(parseWindow("Weekly usage")),
+  };
 }
 
 /**
@@ -134,10 +134,10 @@ export function parseUsageWindows(html, now = Date.now()) {
  * @returns {string | null} 小写套餐类型，如 "pro" / "free"；抓不到为 null
  */
 export function parsePlanType(html) {
-    const m = html.match(
-        /Cloud usage<\/span>[\s\S]{0,400}?<span[^>]*\bcapitalize\b[^>]*>\s*([^<]+?)\s*<\/span/,
-    );
-    return m ? m[1].trim().toLowerCase() : null;
+  const m = html.match(
+    /Cloud usage<\/span>[\s\S]{0,400}?<span[^>]*\bcapitalize\b[^>]*>\s*([^<]+?)\s*<\/span/,
+  );
+  return m ? m[1].trim().toLowerCase() : null;
 }
 
 // #endregion 解析工具 --------------------------------
@@ -155,40 +155,40 @@ export function parsePlanType(html) {
  * @throws {Error} cookie 失效、网络失败或页面结构变更
  */
 async function fetchUsage(sessionCookie) {
-    const resp = await fetchWithTimeout(SETTINGS_URL, {
-        headers: {
-            Cookie: `__Secure-session=${sessionCookie}`,
-            Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
-            "User-Agent": BROWSER_UA,
-        },
-        redirect: "manual",
-    });
+  const resp = await fetchWithTimeout(SETTINGS_URL, {
+    headers: {
+      Cookie: `__Secure-session=${sessionCookie}`,
+      Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+      "User-Agent": BROWSER_UA,
+    },
+    redirect: "manual",
+  });
 
-    // cookie 失效：ollama.com 会 3xx 重定向到登录页
-    if (resp.status >= 300 && resp.status < 400) {
-        throw new Error(
-            `cookie 已过期或无效(重定向到 ${resp.headers.get("location")})，请从浏览器重新获取 __Secure-session`,
-        );
-    }
-    if (!resp.ok) {
-        throw new Error(httpStatusError(resp.status));
-    }
+  // cookie 失效：ollama.com 会 3xx 重定向到登录页
+  if (resp.status >= 300 && resp.status < 400) {
+    throw new Error(
+      `cookie 已过期或无效(重定向到 ${resp.headers.get("location")})，请从浏览器重新获取 __Secure-session`,
+    );
+  }
+  if (!resp.ok) {
+    throw new Error(httpStatusError(resp.status));
+  }
 
-    const html = await resp.text();
+  const html = await resp.text();
 
-    const usage = parseUsageWindows(html);
-    const planType = parsePlanType(html);
-    // 套餐类型为 free（未订阅/已过期降级）时视为无活跃套餐
-    if (planType === "free") {
-        throw new Error(`${NO_ACTIVE_PLAN}，当前为${planType}套餐`);
+  const usage = parseUsageWindows(html);
+  const planType = parsePlanType(html);
+  // 套餐类型为 free（未订阅/已过期降级）时视为无活跃套餐
+  if (planType === "free") {
+    throw new Error(`${NO_ACTIVE_PLAN}，当前为${planType}套餐`);
+  }
+  if (usage.rolling === null && usage.weekly === null) {
+    if (/Session usage|Weekly usage/i.test(html)) {
+      throw new Error("页面解析失败，页面结构可能已更新");
     }
-    if (usage.rolling === null && usage.weekly === null) {
-        if (/Session usage|Weekly usage/i.test(html)) {
-            throw new Error("页面解析失败，页面结构可能已更新");
-        }
-        throw new Error("未找到用量数据");
-    }
-    return usage;
+    throw new Error("未找到用量数据");
+  }
+  return usage;
 }
 
 // #endregion 用量请求 --------------------------------
@@ -208,17 +208,17 @@ async function fetchUsage(sessionCookie) {
  * @returns {Promise<string>} 输出行
  */
 export async function queryUsage(options = {}) {
-    return runQueryUsage(
-        {
-            key: KEY,
-            defaultLabels: DEFAULT_LABELS[KEY],
-            readCredential: (account) => (account.cookie || "").trim(),
-            missingCredential:
-                "cookie 为空，请从浏览器 DevTools -> Application -> Cookies 复制 __Secure-session 填入配置",
-            fetchUsage,
-        },
-        options,
-    );
+  return runQueryUsage(
+    {
+      key: KEY,
+      defaultLabels: DEFAULT_LABELS[KEY],
+      readCredential: (account) => (account.cookie || "").trim(),
+      missingCredential:
+        "cookie 为空，请从浏览器 DevTools -> Application -> Cookies 复制 __Secure-session 填入配置",
+      fetchUsage,
+    },
+    options,
+  );
 }
 
 // #endregion 查询入口 --------------------------------
@@ -226,7 +226,7 @@ export async function queryUsage(options = {}) {
 // #region CLI 壳 ----------------
 
 if (isMainModule(import.meta.url)) {
-    await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
+  await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
 }
 
 // #endregion CLI 壳 --------------------------------

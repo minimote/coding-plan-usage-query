@@ -18,18 +18,18 @@
  */
 
 import {
-    KEYS,
-    NO_ACTIVE_PLAN,
-    INVALID_API_KEY,
-    DEFAULT_LABELS,
-    ensureAnyWindow,
-    fetchWithTimeout,
-    httpStatusError,
-    isMainModule,
-    readJsonResponse,
-    toResetSec,
-    runQueryCli,
-    runQueryUsage,
+  KEYS,
+  NO_ACTIVE_PLAN,
+  INVALID_API_KEY,
+  DEFAULT_LABELS,
+  ensureAnyWindow,
+  fetchWithTimeout,
+  httpStatusError,
+  isMainModule,
+  readJsonResponse,
+  toResetSec,
+  runQueryCli,
+  runQueryUsage,
 } from "../utils/utils-query-usage.mjs";
 
 // #region 配置常量 ----------------
@@ -59,43 +59,43 @@ const BASE_URL = "https://api.commandcode.ai";
  * }}
  */
 export function parseUsageResponse(credits, subs, summary, now = Date.now()) {
-    const toWindow = (w) => {
-        if (!w || typeof w !== "object") {
-            return null;
-        }
-        // 必须是原始 number，Number() 会把 null/"" 强转成 0 而误算成未使用
-        const cap = w.cap;
-        const used = w.used;
-        if (
-            typeof cap !== "number" ||
-            !Number.isFinite(cap) ||
-            typeof used !== "number" ||
-            !Number.isFinite(used) ||
-            cap <= 0
-        ) {
-            return null;
-        }
-        return {
-            pct: (used / cap) * 100,
-            sec: toResetSec(w.resetAt, now),
-        };
-    };
-
-    // limited 显式 false 是按量付费，不展示滚动窗口；缺失时照常展示，避免改字段名后窗口消失
-    const windows = credits?.windowLimits;
-    const windowLimited = windows?.limited !== false;
-    const monthly = monthlyWindow(
-        credits?.credits,
-        toTotalCost(summary),
-        toMonthSec(subs?.data?.currentPeriodEnd, now),
-    );
-    const usage = { monthly: monthly.window, note: monthly.note };
-    // 按量付费账号不写键（缺键=平台无此窗口），而不是置 null（会被渲染成 五:--）
-    if (windowLimited) {
-        usage.rolling = toWindow(windows?.fiveHour);
-        usage.weekly = toWindow(windows?.weekly);
+  const toWindow = (w) => {
+    if (!w || typeof w !== "object") {
+      return null;
     }
-    return usage;
+    // 必须是原始 number，Number() 会把 null/"" 强转成 0 而误算成未使用
+    const cap = w.cap;
+    const used = w.used;
+    if (
+      typeof cap !== "number" ||
+      !Number.isFinite(cap) ||
+      typeof used !== "number" ||
+      !Number.isFinite(used) ||
+      cap <= 0
+    ) {
+      return null;
+    }
+    return {
+      pct: (used / cap) * 100,
+      sec: toResetSec(w.resetAt, now),
+    };
+  };
+
+  // limited 显式 false 是按量付费，不展示滚动窗口；缺失时照常展示，避免改字段名后窗口消失
+  const windows = credits?.windowLimits;
+  const windowLimited = windows?.limited !== false;
+  const monthly = monthlyWindow(
+    credits?.credits,
+    toTotalCost(summary),
+    toMonthSec(subs?.data?.currentPeriodEnd, now),
+  );
+  const usage = { monthly: monthly.window, note: monthly.note };
+  // 按量付费账号不写键（缺键=平台无此窗口），而不是置 null（会被渲染成 五:--）
+  if (windowLimited) {
+    usage.rolling = toWindow(windows?.fiveHour);
+    usage.weekly = toWindow(windows?.weekly);
+  }
+  return usage;
 }
 
 /**
@@ -107,10 +107,10 @@ export function parseUsageResponse(credits, subs, summary, now = Date.now()) {
  * @returns {number | null}
  */
 function toTotalCost(summary) {
-    const raw = summary?.totalCost ?? summary?.data?.totalCost;
-    return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
-        ? raw
-        : null;
+  const raw = summary?.totalCost ?? summary?.data?.totalCost;
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+    ? raw
+    : null;
 }
 
 /**
@@ -125,25 +125,25 @@ function toTotalCost(summary) {
  * @returns {{ window: { pct: number, sec: number } | null, note: string | null }}
  */
 function monthlyWindow(creditValues, totalCost, periodSec) {
-    if (totalCost === null) {
-        // 分子拿不到，5h/周仍有效，只降级月窗口
-        return { window: null, note: "月已花金额获取失败" };
-    }
-    // 必须是非负 number：Number() 会把 null/"" 强转成 0 而误算成已耗尽
-    const remaining = creditValues?.monthlyCredits;
-    if (typeof remaining !== "number" || !Number.isFinite(remaining) || remaining < 0) {
-        return { window: null, note: "月剩余额度获取失败" };
-    }
-    // purchasedCredits 和 freeCredits 归属未验证，一并
-    //只按「已花 + 套餐剩余」算总额度，避免重复计数
-    const pool = totalCost + remaining;
-    if (pool <= 0) {
-        return { window: null, note: null };
-    }
-    return {
-        window: { pct: (totalCost / pool) * 100, sec: periodSec },
-        note: null,
-    };
+  if (totalCost === null) {
+    // 分子拿不到，5h/周仍有效，只降级月窗口
+    return { window: null, note: "月已花金额获取失败" };
+  }
+  // 必须是非负 number：Number() 会把 null/"" 强转成 0 而误算成已耗尽
+  const remaining = creditValues?.monthlyCredits;
+  if (typeof remaining !== "number" || !Number.isFinite(remaining) || remaining < 0) {
+    return { window: null, note: "月剩余额度获取失败" };
+  }
+  // purchasedCredits 和 freeCredits 归属未验证，一并
+  // 只按「已花 + 套餐剩余」算总额度，避免重复计数
+  const pool = totalCost + remaining;
+  if (pool <= 0) {
+    return { window: null, note: null };
+  }
+  return {
+    window: { pct: (totalCost / pool) * 100, sec: periodSec },
+    note: null,
+  };
 }
 
 /**
@@ -153,8 +153,8 @@ function monthlyWindow(creditValues, totalCost, periodSec) {
  * @returns {number | null}
  */
 function toMonthSec(iso, now) {
-    const t = new Date(iso).getTime();
-    return toResetSec(t, now);
+  const t = new Date(iso).getTime();
+  return toResetSec(t, now);
 }
 
 // #endregion 解析工具 --------------------------------
@@ -170,23 +170,23 @@ function toMonthSec(iso, now) {
  * @throws {Error} 401/403 → apiKey 无效；其他非 2xx 抛 HTTP 错误
  */
 async function callApi(path, apiKey) {
-    const resp = await fetchWithTimeout(BASE_URL + path, {
-        headers: {
-            authorization: `Bearer ${apiKey}`,
-            accept: "application/json",
-        },
-    });
+  const resp = await fetchWithTimeout(BASE_URL + path, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: "application/json",
+    },
+  });
 
-    // 401/403 指向 key 本身；套餐过期是 200 + 窗口全空，不走这两个码，
-    // 故不能判成「无活跃套餐」而被 hideOnNoActivePlan 静默隐藏
-    if (resp.status === 401 || resp.status === 403) {
-        throw new Error(INVALID_API_KEY);
-    }
-    if (!resp.ok) {
-        throw new Error(httpStatusError(resp.status));
-    }
+  // 401/403 指向 key 本身；套餐过期是 200 + 窗口全空，不走这两个码，
+  // 故不能判成「无活跃套餐」而被 hideOnNoActivePlan 静默隐藏
+  if (resp.status === 401 || resp.status === 403) {
+    throw new Error(INVALID_API_KEY);
+  }
+  if (!resp.ok) {
+    throw new Error(httpStatusError(resp.status));
+  }
 
-    return readJsonResponse(resp);
+  return readJsonResponse(resp);
 }
 
 /**
@@ -201,23 +201,23 @@ async function callApi(path, apiKey) {
  * }>}
  */
 async function fetchUsage(apiKey) {
-    // summary 只补月窗口，失败不该拖垮 5h/周；用常规超时，实测首次请求约 2.6s
-    const summaryPromise = callApi("/alpha/usage/summary", apiKey).catch(
-        () => null,
-    );
-    const [credits, subs] = await Promise.all([
-        callApi("/alpha/billing/credits", apiKey),
-        callApi("/alpha/billing/subscriptions", apiKey),
-    ]);
+  // summary 只补月窗口，失败不该拖垮 5h/周；用常规超时，实测首次请求约 2.6s
+  const summaryPromise = callApi("/alpha/usage/summary", apiKey).catch(
+    () => null,
+  );
+  const [credits, subs] = await Promise.all([
+    callApi("/alpha/billing/credits", apiKey),
+    callApi("/alpha/billing/subscriptions", apiKey),
+  ]);
 
-    // 套餐过期时返回 200 + data:null，先拦下避免误报结构异常
-    if (!subs?.data) {
-        throw new Error(NO_ACTIVE_PLAN);
-    }
+  // 套餐过期时返回 200 + data:null，先拦下避免误报结构异常
+  if (!subs?.data) {
+    throw new Error(NO_ACTIVE_PLAN);
+  }
 
-    const usage = parseUsageResponse(credits, subs, (await summaryPromise) ?? {});
-    ensureAnyWindow(usage);
-    return usage;
+  const usage = parseUsageResponse(credits, subs, (await summaryPromise) ?? {});
+  ensureAnyWindow(usage);
+  return usage;
 }
 
 // #endregion API 调用 --------------------------------
@@ -238,16 +238,16 @@ async function fetchUsage(apiKey) {
  * @returns {Promise<string>} 输出行；隐藏时为空字符串
  */
 export async function queryUsage(options = {}) {
-    return runQueryUsage(
-        {
-            key: KEY,
-            defaultLabels: DEFAULT_LABELS[KEY],
-            readCredential: (account) => (account.apiKey || "").trim(),
-            missingCredential: "apiKey 为空，请填入 CommandCode API Key",
-            fetchUsage,
-        },
-        options,
-    );
+  return runQueryUsage(
+    {
+      key: KEY,
+      defaultLabels: DEFAULT_LABELS[KEY],
+      readCredential: (account) => (account.apiKey || "").trim(),
+      missingCredential: "apiKey 为空，请填入 CommandCode API Key",
+      fetchUsage,
+    },
+    options,
+  );
 }
 
 // #endregion 查询入口 --------------------------------
@@ -255,7 +255,7 @@ export async function queryUsage(options = {}) {
 // #region CLI 壳 ----------------
 
 if (isMainModule(import.meta.url)) {
-    await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
+  await runQueryCli(queryUsage, DEFAULT_LABELS[KEY]);
 }
 
 // #endregion CLI 壳 --------------------------------

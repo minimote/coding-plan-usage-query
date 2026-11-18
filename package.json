@@ -1,30 +1,30 @@
 {
-    "name": "coding-plan-usage-query",
-    "version": "2.12.0",
-    "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、CommandCode、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan，推荐搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看。",
-    "type": "module",
-    "private": true,
-    "engines": {
-        "node": ">=22.13.0"
-    },
-    "scripts": {
-        "login:qwen": "node src/login/login-qwen.mjs",
-        "query": "node src/query/query-usage-smart.mjs",
-        "query:all": "node src/query/query-usage-all.mjs",
-        "query:ark": "node src/query/query-usage-ark.mjs",
-        "query:commandcode": "node src/query/query-usage-commandcode.mjs",
-        "query:ollama": "node src/query/query-usage-ollama.mjs",
-        "query:opencode": "node src/query/query-usage-opencode-go.mjs",
-        "query:qwen": "node src/query/query-usage-qwen.mjs",
-        "preview": "node src/tools/preview.mjs",
-        "test": "node --test",
-        "lint": "eslint src test"
-    },
-    "devDependencies": {
-        "@eslint/js": "^10.0.1",
-        "eslint": "^10.14.0",
-        "globals": "^17.14.0",
-        "playwright-core": "^1.62.0"
-    },
-    "license": "MIT"
+  "name": "coding-plan-usage-query",
+  "version": "2.13.0",
+  "description": "查询各平台 Coding Plan 的套餐用量和重置倒计时，支持火山方舟 Coding Plan / Agent Plan、CommandCode、Ollama Cloud、OpenCode Go、阿里云千问 TokenPlan。可搭配 ccstatusline / ccstatusline-zh 的自定义命令放在 Claude Code 状态栏查看，自动识别 CC Switch 的当前供应商，自适应终端宽度。",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "login:qwen": "node src/login/login-qwen.mjs",
+    "query": "node src/query/query-usage-smart.mjs",
+    "query:all": "node src/query/query-usage-all.mjs",
+    "query:ark": "node src/query/query-usage-ark.mjs",
+    "query:commandcode": "node src/query/query-usage-commandcode.mjs",
+    "query:ollama": "node src/query/query-usage-ollama.mjs",
+    "query:opencode": "node src/query/query-usage-opencode-go.mjs",
+    "query:qwen": "node src/query/query-usage-qwen.mjs",
+    "preview": "node src/tools/preview.mjs",
+    "test": "node --test",
+    "lint": "eslint src test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "playwright-core": "^1.62.0"
+  },
+  "license": "MIT"
 }

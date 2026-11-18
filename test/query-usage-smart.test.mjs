@@ -7,58 +7,76 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isFreeModelName } from "../src/query/query-usage-smart.mjs";
+import {
+  isFreeModelName,
+  buildMatchedQueryOptions,
+} from "../src/query/query-usage-smart.mjs";
 
 /** 强制 getActualModelName 走直连模式（ANTHROPIC_BASE_URL 非本地），返回恢复函数 */
 function forceDirectMode() {
-    const prev = process.env.ANTHROPIC_BASE_URL;
-    process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com";
-    return () => {
-        if (prev === undefined) delete process.env.ANTHROPIC_BASE_URL;
-        else process.env.ANTHROPIC_BASE_URL = prev;
-    };
+  const prev = process.env.ANTHROPIC_BASE_URL;
+  process.env.ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+  return () => {
+    if (prev === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = prev;
+  };
 }
 
 test("isFreeModelName: 模型名含 free 返回 true", () => {
-    const restore = forceDirectMode();
-    try {
-        const raw = JSON.stringify({
-            model: { display_name: "claude-haiku-4-5-free" },
-        });
-        assert.equal(isFreeModelName(raw), true);
-    } finally {
-        restore();
-    }
+  const restore = forceDirectMode();
+  try {
+    const raw = JSON.stringify({
+      model: { display_name: "claude-haiku-4-5-free" },
+    });
+    assert.equal(isFreeModelName(raw), true);
+  } finally {
+    restore();
+  }
 });
 
 test("isFreeModelName: 大小写不敏感（FREE）", () => {
-    const restore = forceDirectMode();
-    try {
-        const raw = JSON.stringify({
-            model: { display_name: "claude-haiku-4-5-FREE" },
-        });
-        assert.equal(isFreeModelName(raw), true);
-    } finally {
-        restore();
-    }
+  const restore = forceDirectMode();
+  try {
+    const raw = JSON.stringify({
+      model: { display_name: "claude-haiku-4-5-FREE" },
+    });
+    assert.equal(isFreeModelName(raw), true);
+  } finally {
+    restore();
+  }
 });
 
 test("isFreeModelName: 模型名不含 free 返回 false", () => {
-    const restore = forceDirectMode();
-    try {
-        const raw = JSON.stringify({
-            model: { display_name: "claude-opus-4" },
-        });
-        assert.equal(isFreeModelName(raw), false);
-    } finally {
-        restore();
-    }
+  const restore = forceDirectMode();
+  try {
+    const raw = JSON.stringify({
+      model: { display_name: "claude-opus-4" },
+    });
+    assert.equal(isFreeModelName(raw), false);
+  } finally {
+    restore();
+  }
 });
 
 test("isFreeModelName: 空输入 / 空白 / 非法 JSON 返回 false", () => {
-    assert.equal(isFreeModelName(""), false);
-    assert.equal(isFreeModelName("   "), false);
-    assert.equal(isFreeModelName(undefined), false);
-    assert.equal(isFreeModelName(null), false);
-    assert.equal(isFreeModelName("{not json"), false);
+  assert.equal(isFreeModelName(""), false);
+  assert.equal(isFreeModelName("   "), false);
+  assert.equal(isFreeModelName(undefined), false);
+  assert.equal(isFreeModelName(null), false);
+  assert.equal(isFreeModelName("{not json"), false);
+});
+
+test("buildMatchedQueryOptions: 匹配路径固定启用 hideOnNoActivePlan", () => {
+  // 守护 README 的 24 小时隐藏承诺：这里丢了这个选项，匹配路径会退回显示瞬时错误
+  const cfg = { ark: [{ apiKey: "k" }] };
+  assert.deepEqual(
+    buildMatchedQueryOptions({ key: "ark", index: 1 }, "short", cfg),
+    {
+      position: 1,
+      display: "short",
+      cache: true,
+      hideOnNoActivePlan: true,
+      _config: cfg,
+    },
+  );
 });
